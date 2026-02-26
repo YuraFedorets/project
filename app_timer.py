@@ -5,11 +5,10 @@ from datetime import datetime
 
 # Налаштування додатка
 app = Flask(__name__)
-app.secret_key = 'ukd_recruitment_secret_key_v5'
+app.secret_key = 'ukd_recruitment_secret_key_v6'
 DATABASE = 'ukd_database.db'
 
 # --- РОБОТА З БАЗОЮ ДАНИХ (SQLite) ---
-
 def get_db():
     db = getattr(g, '_database', None)
     if db is None:
@@ -28,78 +27,69 @@ def init_db():
         db = get_db()
         cursor = db.cursor()
         
-        # 1. Users
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                email TEXT,
-                role TEXT NOT NULL DEFAULT 'STUDENT',
-                status TEXT DEFAULT 'active'
-            )
-        ''')
-
-        # 2. Students
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS students (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER UNIQUE,
-                first_name TEXT,
-                last_name TEXT,
-                patronymic TEXT,
-                course TEXT,
-                specialty TEXT,
-                skills TEXT,
-                links TEXT,
-                contact_info TEXT,
-                rating INTEGER DEFAULT 0,
-                avatar TEXT DEFAULT 'https://cdn-icons-png.flaticon.com/512/354/354637.png',
-                FOREIGN KEY (user_id) REFERENCES users (id)
-            )
-        ''')
-        
-        # Міграції для студентів (якщо БД вже існує)
-        for col in ['patronymic', 'course', 'contact_info']:
-            try: cursor.execute(f"ALTER TABLE students ADD COLUMN {col} TEXT")
-            except sqlite3.OperationalError: pass
-            
-        try: cursor.execute("ALTER TABLE students ADD COLUMN rating INTEGER DEFAULT 0")
-        except sqlite3.OperationalError: pass
-
-        # 3. Companies
+        # 1. Таблиця Компаній (тільки зареєстровані компанії)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS companies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER UNIQUE,
-                company_name TEXT,
+                company_name TEXT UNIQUE NOT NULL,
                 description TEXT,
+                contact_info TEXT,
                 avatar TEXT DEFAULT 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png',
                 position TEXT,
-                contact_info TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
-        
-        # Міграції для компаній
-        for col in ['avatar', 'position', 'contact_info']:
-            try: cursor.execute(f"ALTER TABLE companies ADD COLUMN {col} TEXT")
-            except sqlite3.OperationalError: pass
-            
-        try: cursor.execute("ALTER TABLE companies ALTER COLUMN avatar SET DEFAULT 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png'")
-        except sqlite3.OperationalError: pass
 
-        # 4. Admins
+        # 2. Таблиця Користувачів (перероблена: логін=email, є прив'язка до компанії та посада)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'STUDENT', -- 'STUDENT', 'COMPANY_ADMIN', 'EMPLOYEE', 'ADMIN'
+                company_id INTEGER,
+                position TEXT,
+                status TEXT DEFAULT 'active',
+                FOREIGN KEY (company_id) REFERENCES companies (id)
+            )
+        ''')
+
+        # 3. Таблиця Студентів (незалежна таблиця з власними логінами)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS students (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                username     TEXT UNIQUE,
+                email        TEXT UNIQUE,
+                password     TEXT DEFAULT '123',
+                status       TEXT DEFAULT 'active',
+                first_name   TEXT,
+                last_name    TEXT,
+                patronymic   TEXT,
+                course       TEXT,
+                specialty    TEXT,
+                skills       TEXT,
+                links        TEXT,
+                contact_info TEXT,
+                rating       INTEGER DEFAULT 0,
+                avatar       TEXT DEFAULT 'https://cdn-icons-png.flaticon.com/512/354/354637.png'
+            )
+        ''')
+
+        # 4. Адміни (незалежна таблиця, без прив'язки до users)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS admins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER UNIQUE,
-                admin_level INTEGER DEFAULT 1,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                username    TEXT UNIQUE NOT NULL,
+                email       TEXT UNIQUE NOT NULL,
+                password    TEXT NOT NULL,
+                status      TEXT DEFAULT 'active',
+                admin_level INTEGER DEFAULT 1
             )
         ''')
 
-        # 5. Invitations
+        # 5. Запрошення (Invitations)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS invitations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,24 +105,25 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
-        
-        try: cursor.execute("ALTER TABLE invitations ADD COLUMN flagged BOOLEAN DEFAULT 0")
-        except sqlite3.OperationalError: pass
-        try: cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
-        except sqlite3.OperationalError: pass
             
         db.commit()
         
-        # Admin Default
-        cursor.execute("SELECT * FROM users WHERE username = 'admin'")
+        # Створення дефолтного адміна
+        cursor.execute("SELECT * FROM admins WHERE username = 'admin'")
         if not cursor.fetchone():
-            cursor.execute("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)",
-                           ('admin', '123', 'admin@ukd.edu.ua', 'ADMIN'))
-            admin_user_id = cursor.lastrowid
-            cursor.execute("INSERT INTO admins (user_id, admin_level) VALUES (?, ?)", (admin_user_id, 10))
+            cursor.execute(
+                "INSERT INTO admins (username, email, password, admin_level) VALUES (?, ?, ?, ?)",
+                ('admin', 'admin@ukd.edu.ua', '123', 10)
+            )
             db.commit()
 
-# --- HTML ШАБЛОН ---
+# Ініціалізація БД
+if not os.path.exists(DATABASE):
+    init_db()
+else:
+    init_db()
+
+# --- РОУТИ ---
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -202,6 +193,27 @@ HTML_TEMPLATE = """
         input, select, textarea { border: 2px solid #ddd; transition: 0.3s; color: black; }
         input:focus, select:focus, textarea:focus { border-color: var(--ukd-bright); outline: none; }
         .modal-bg { background: rgba(0,0,0,0.9); }
+        <div id="add-employee-modal" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center">
+        <div class="bg-white p-10 rounded-[30px] w-full max-w-md relative shadow-2xl border-l-8 border-red-600">
+            <button onclick="toggleModal('add-employee-modal')" class="absolute top-6 right-6 text-gray-400 hover:text-black transition text-xl"><i class="fas fa-times"></i></button>
+            <h2 class="text-3xl font-black uppercase mb-6 tracking-tight">Новий Рекрутер</h2>
+            <form action="/company/add_employee" method="POST" class="space-y-5">
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email Працівника (Логін)</label>
+                    <input type="email" name="email" required placeholder="hr@company.com" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Посада</label>
+                    <input type="text" name="position" required placeholder="Напр: HR Менеджер" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Тимчасовий Пароль</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
+                </div>
+                <button type="submit" class="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 transition shadow-lg mt-4">Зареєструвати працівника</button>
+            </form>
+        </div>
+    </div>
         .landing-hero { background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://yt3.googleusercontent.com/ytc/AIdro_k624OQvH_3vjA4H8U1fQvX5Q5x5x5x5x5x5x5x5=s900-c-k-c0x00ffffff-no-rj'); background-size: cover; background-position: center; }
         .table-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     </style>
@@ -238,7 +250,7 @@ HTML_TEMPLATE = """
                         </a>
                     {% endif %}
 
-                    {% if session.get('role') == 'COMPANY' %}
+                    {% if session.get('role') in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}
                          <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
                             <i class="fas fa-paper-plane mr-2"></i> Мої Запити
                         </a>
@@ -254,6 +266,9 @@ HTML_TEMPLATE = """
                     {% endif %}
 
                     <a href="/?tab=profile" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'profile' else '' }}">
+                    <button onclick="toggleModal('add-employee-modal')" class="bg-black text-white px-6 py-3 rounded-xl font-bold uppercase tracking-wider hover:bg-red-600 transition shadow-lg flex items-center gap-2">
+    <i class="fas fa-user-plus"></i> Добавити робітника
+</button>
                         <i class="fas fa-user-circle mr-2"></i> Мій Профіль
                     </a>
                 </div>
@@ -456,11 +471,11 @@ HTML_TEMPLATE = """
                         </div>
 
                         <div class="grid grid-cols-2 gap-2 mt-auto pt-4 border-t border-gray-100">
-                            <button onclick="openStudentProfile({{ std.user_id }})" class="bg-black text-white py-2 rounded-lg font-bold text-xs uppercase hover:bg-gray-800 transition">
+                            <button onclick="openStudentProfile({{ std.id }})" class="bg-black text-white py-2 rounded-lg font-bold text-xs uppercase hover:bg-gray-800 transition">
                                 <i class="fas fa-eye mr-1"></i> Профіль
                             </button>
                             
-                            {% if session.get('role') in ['COMPANY', 'ADMIN'] %}
+                            {% if session.get('role') in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE', 'ADMIN'] %}
                             <button onclick="openInviteModal({{ std.id }}, '{{ std.first_name }}')" class="bg-red-700 text-white py-2 rounded-lg font-bold text-xs uppercase hover:bg-red-800 transition">
                                 <i class="fas fa-handshake mr-1"></i> Найняти
                             </button>
@@ -788,7 +803,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
                         
-                        {% elif user_info.role == 'COMPANY' %}
+                        {% elif user_info.role in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}
                         <div class="space-y-4">
                             <div>
                                 <label class="label-text text-blue-800">Назва Компанії</label>
@@ -1022,7 +1037,7 @@ def index():
     # Формування запиту з фільтрами (Ranking)
     students = []
     if active_tab == 'ranking':
-        base_query = "SELECT s.*, u.email FROM students s JOIN users u ON s.user_id = u.id WHERE u.status != 'blocked'"
+        base_query = "SELECT s.* FROM students s WHERE s.status != 'blocked'"
         params = []
         
         if search_query:
@@ -1049,32 +1064,57 @@ def index():
     # Users Table for Admin
     all_users = []
     if active_tab == 'users' and session.get('role') == 'ADMIN':
-        query = """
-            SELECT u.id, u.username, u.email, u.role, u.status,
-                   s.first_name, s.last_name, s.patronymic, s.course, s.specialty, s.skills, s.links,
-                   c.company_name, c.description, c.position,
-                   COALESCE(s.contact_info, c.contact_info) as contact_info
-            FROM users u
-            LEFT JOIN students s ON u.id = s.user_id
-            LEFT JOIN companies c ON u.id = c.user_id
-            ORDER BY u.id DESC
-        """
-        all_users = [dict(row) for row in db.execute(query).fetchall()]
+        # Адміни
+        for r in db.execute("SELECT * FROM admins").fetchall():
+            row = dict(r)
+            row.update({'role': 'ADMIN', 'company_name': None, 'position': None,
+                        'first_name': None, 'last_name': None, 'patronymic': None,
+                        'course': None, 'specialty': None, 'skills': None,
+                        'links': None, 'contact_info': row.get('contact_info')})
+            all_users.append(row)
+        # Працівники компаній
+        for r in db.execute("""
+            SELECT u.*, c.company_name FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+        """).fetchall():
+            row = dict(r)
+            row.update({'first_name': None, 'last_name': None, 'patronymic': None,
+                        'course': None, 'specialty': None, 'skills': None, 'links': None})
+            all_users.append(row)
+        # Студенти
+        for r in db.execute("SELECT * FROM students").fetchall():
+            row = dict(r)
+            row.update({'role': 'STUDENT', 'company_name': None, 'position': None})
+            all_users.append(row)
 
     # Profile Data
     user_info = {}
     profile_data = {}
     if 'user_id' in session:
         target_id = session.get('edit_target_id', session['user_id'])
-        cur = db.execute("SELECT * FROM users WHERE id = ?", (target_id,))
-        user_info = dict(cur.fetchone() or {})
-        
-        if user_info.get('role') == 'STUDENT':
-            cur = db.execute("SELECT * FROM students WHERE user_id = ?", (target_id,))
-            profile_data = dict(cur.fetchone() or {})
-        elif user_info.get('role') == 'COMPANY':
-            cur = db.execute("SELECT * FROM companies WHERE user_id = ?", (target_id,))
-            profile_data = dict(cur.fetchone() or {})
+        role = session.get('role')
+
+        if role == 'ADMIN':
+            row = db.execute("SELECT * FROM admins WHERE id = ?", (target_id,)).fetchone()
+            user_info = dict(row) if row else {}
+            user_info['role'] = 'ADMIN'
+            profile_data = user_info
+
+        elif role == 'STUDENT':
+            row = db.execute("SELECT * FROM students WHERE id = ?", (target_id,)).fetchone()
+            user_info = dict(row) if row else {}
+            user_info['role'] = 'STUDENT'
+            profile_data = user_info
+
+        else:  # COMPANY_ADMIN / EMPLOYEE
+            row = db.execute("SELECT * FROM users WHERE id = ?", (target_id,)).fetchone()
+            user_info = dict(row) if row else {}
+            comp_id = user_info.get('company_id')
+            if comp_id:
+                cur = db.execute("SELECT * FROM companies WHERE id = ?", (comp_id,))
+                profile_data = dict(cur.fetchone() or {})
+            else:
+                profile_data = {}
 
     # Invitations
     invitations = []
@@ -1112,7 +1152,7 @@ def index():
                 FROM invitations i
                 JOIN students s ON i.student_id = s.id
                 LEFT JOIN companies c ON i.company_id = c.id
-                WHERE s.user_id = ?
+                WHERE s.id = ?
                 ORDER BY i.created_at DESC
             """
             invitations = [dict(row) for row in db.execute(query, (session['user_id'],)).fetchall()]
@@ -1146,9 +1186,13 @@ def register():
         user_id = cur.lastrowid
         
         if role == 'STUDENT':
-            cur.execute("INSERT INTO students (user_id, first_name, last_name) VALUES (?, ?, ?)", (user_id, username, 'Student'))
+            cur.execute("INSERT INTO students (user_id, first_name, last_name) VALUES (?, ?, ?)", (user_id, username, ''))
         elif role == 'COMPANY':
-            cur.execute("INSERT INTO companies (user_id, company_name) VALUES (?, ?)", (user_id, username))
+            company_name = request.form.get('company_name') or username
+            cur.execute("INSERT INTO companies (company_name) VALUES (?)", (company_name,))
+            company_id = cur.lastrowid
+            cur.execute("UPDATE users SET company_id=?, role='COMPANY_ADMIN', position='Головний керівник' WHERE id=?", (company_id, user_id))
+            cur.execute("UPDATE companies SET user_id=? WHERE id=?", (user_id, company_id))
             
         db.commit()
         session['user_id'] = user_id
@@ -1162,23 +1206,59 @@ def register():
 
 @app.route('/login', methods=['POST'])
 def login():
-    username = request.form.get('username')
-    password = request.form.get('password')
+    login_input = (request.form.get('username') or '').strip()
+    password    = request.form.get('password')
     db = get_db()
-    user = db.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
-    
+
+    # 1. Адміни — по username або email
+    admin = db.execute(
+        "SELECT * FROM admins WHERE (username = ? OR email = ?) AND password = ?",
+        (login_input, login_input, password)
+    ).fetchone()
+    if admin:
+        if dict(admin).get('status') == 'blocked':
+            flash("Ваш акаунт заблоковано.")
+            return redirect('/')
+        session['user_id']    = admin['id']
+        session['role']       = 'ADMIN'
+        session['username']   = admin['username']
+        session['company_id'] = None
+        session.pop('edit_target_id', None)
+        return redirect('/')
+
+    # 2. Студенти — по username або email
+    student = db.execute(
+        "SELECT * FROM students WHERE (username = ? OR email = ?) AND password = ?",
+        (login_input, login_input, password)
+    ).fetchone()
+    if student:
+        if dict(student).get('status') == 'blocked':
+            flash("Ваш акаунт заблоковано.")
+            return redirect('/')
+        session['user_id']    = student['id']
+        session['role']       = 'STUDENT'
+        session['username']   = student['username']
+        session['company_id'] = None
+        session.pop('edit_target_id', None)
+        return redirect('/')
+
+    # 3. Працівники компаній — по username або email
+    user = db.execute(
+        "SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?",
+        (login_input, login_input, password)
+    ).fetchone()
     if user:
         if dict(user).get('status') == 'blocked':
-            flash("Ваш акаунт було заблоковано адміністратором.")
+            flash("Ваш акаунт заблоковано.")
             return redirect('/')
-            
-        session['user_id'] = user['id']
-        session['role'] = user['role']
-        session['username'] = user['username']
+        session['user_id']    = user['id']
+        session['role']       = user['role']
+        session['username']   = user['username']
+        session['company_id'] = user['company_id']
         session.pop('edit_target_id', None)
-    else:
-        flash("Невірні дані для входу")
-        
+        return redirect('/')
+
+    flash("Невірні дані для входу")
     return redirect('/')
 
 @app.route('/logout')
@@ -1206,7 +1286,7 @@ def update_profile():
         # Якщо ми під адміном, отримуємо переданий рейтинг (якщо ні - лишаємо старий)
         rating_val = request.form.get('rating')
         if session.get('role') == 'ADMIN' and rating_val is not None:
-            db.execute("UPDATE students SET rating=? WHERE user_id=?", (int(rating_val), target_id))
+            db.execute("UPDATE students SET rating=? WHERE id=?", (int(rating_val), target_id))
 
         db.execute("""
             UPDATE students SET first_name=?, last_name=?, patronymic=?, course=?, specialty=?, skills=?, links=?, contact_info=?, avatar=?
@@ -1223,18 +1303,20 @@ def update_profile():
             request.form.get('avatar'),
             target_id
         ))
-    elif role == 'COMPANY':
-        db.execute("""
-            UPDATE companies SET company_name=?, description=?, avatar=?, position=?, contact_info=?
-            WHERE user_id=?
-        """, (
-            request.form.get('company_name'),
-            request.form.get('description'),
-            request.form.get('avatar'),
-            request.form.get('position'),
-            request.form.get('contact_info'),
-            target_id
-        ))
+    elif role in ('COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'):
+        comp_id = db.execute('SELECT company_id FROM users WHERE id=?', (target_id,)).fetchone()['company_id']
+        if comp_id:
+            db.execute("""
+                UPDATE companies SET company_name=?, description=?, avatar=?, position=?, contact_info=?
+                WHERE id=?
+            """, (
+                request.form.get('company_name'),
+                request.form.get('description'),
+                request.form.get('avatar'),
+                request.form.get('position'),
+                request.form.get('contact_info'),
+                comp_id
+            ))
     
     db.commit()
     flash("Профіль успішно оновлено!")
@@ -1259,8 +1341,8 @@ def send_invite():
     student_record_id = request.form.get('student_id') 
     message = request.form.get('message')
     
-    comp_row = db.execute("SELECT id FROM companies WHERE user_id = ?", (session['user_id'],)).fetchone()
-    comp_id = comp_row['id'] if comp_row else None
+    user_row = db.execute("SELECT company_id FROM users WHERE id = ?", (session['user_id'],)).fetchone()
+    comp_id = user_row['company_id'] if user_row else None
     
     db.execute("""
         INSERT INTO invitations (student_id, company_id, user_id, message, status)
@@ -1333,7 +1415,7 @@ def admin_delete_user():
     
     db.execute("DELETE FROM students WHERE user_id = ?", (user_id,))
     db.execute("DELETE FROM companies WHERE user_id = ?", (user_id,))
-    db.execute("DELETE FROM admins WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM admins WHERE id = ?", (user_id,))
     db.execute("DELETE FROM users WHERE id = ?", (user_id,))
     db.commit()
     
@@ -1343,11 +1425,7 @@ def admin_delete_user():
 @app.route('/api/student/<int:user_id>')
 def get_student_api(user_id):
     db = get_db()
-    std = db.execute("""
-        SELECT s.*, u.email 
-        FROM students s JOIN users u ON s.user_id = u.id 
-        WHERE u.id = ?
-    """, (user_id,)).fetchone()
+    std = db.execute("SELECT * FROM students WHERE id = ?", (user_id,)).fetchone()
     
     if std:
         return dict(std)
