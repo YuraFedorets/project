@@ -196,21 +196,33 @@ HTML_TEMPLATE = """
         <div id="add-employee-modal" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center">
         <div class="bg-white p-10 rounded-[30px] w-full max-w-md relative shadow-2xl border-l-8 border-red-600">
             <button onclick="toggleModal('add-employee-modal')" class="absolute top-6 right-6 text-gray-400 hover:text-black transition text-xl"><i class="fas fa-times"></i></button>
-            <h2 class="text-3xl font-black uppercase mb-6 tracking-tight">Новий Рекрутер</h2>
-            <form action="/company/add_employee" method="POST" class="space-y-5">
+            <h2 class="text-3xl font-black uppercase mb-6 tracking-tight">Новий Працівник</h2>
+            <form action="/admin/add_employee" method="POST" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email Працівника (Логін)</label>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Компанія</label>
+                    <select name="company_id" required class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none">
+                        {% for comp in all_companies %}
+                        <option value="{{ comp.id }}">{{ comp.company_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Логін</label>
+                    <input type="text" name="username" required placeholder="hr_manager" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email</label>
                     <input type="email" name="email" required placeholder="hr@company.com" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
                 </div>
                 <div>
                     <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Посада</label>
-                    <input type="text" name="position" required placeholder="Напр: HR Менеджер" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
+                    <input type="text" name="position" required placeholder="HR Менеджер" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
                 </div>
                 <div>
-                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Тимчасовий Пароль</label>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Пароль</label>
                     <input type="password" name="password" required placeholder="••••••••" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
                 </div>
-                <button type="submit" class="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 transition shadow-lg mt-4">Зареєструвати працівника</button>
+                <button type="submit" class="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 transition shadow-lg mt-4">Додати працівника</button>
             </form>
         </div>
     </div>
@@ -246,7 +258,10 @@ HTML_TEMPLATE = """
                             <i class="fas fa-shield-alt mr-2"></i> Адмін Панель
                         </a>
                         <a href="/?tab=users" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'users' else '' }}">
-                            <i class="fas fa-users mr-2"></i> Користувачі
+                            <i class="fas fa-user-graduate mr-2"></i> Студенти
+                        </a>
+                        <a href="/?tab=companies" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'companies' else '' }}">
+                            <i class="fas fa-building mr-2"></i> Компанії
                         </a>
                     {% endif %}
 
@@ -265,10 +280,15 @@ HTML_TEMPLATE = """
                         </a>
                     {% endif %}
 
+                    {% if session.get('role') == 'ADMIN' %}
+                    <button onclick="toggleModal('create-company-modal')" class="bg-black text-white px-4 py-2 rounded-xl font-bold uppercase tracking-wider hover:bg-red-600 transition shadow-lg flex items-center gap-2 text-sm">
+                        <i class="fas fa-building mr-1"></i> Нова компанія
+                    </button>
+                    <button onclick="toggleModal('add-employee-modal')" class="bg-black text-white px-4 py-2 rounded-xl font-bold uppercase tracking-wider hover:bg-red-600 transition shadow-lg flex items-center gap-2 text-sm">
+                        <i class="fas fa-user-plus mr-1"></i> Додати робітника
+                    </button>
+                    {% endif %}
                     <a href="/?tab=profile" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'profile' else '' }}">
-                    <button onclick="toggleModal('add-employee-modal')" class="bg-black text-white px-6 py-3 rounded-xl font-bold uppercase tracking-wider hover:bg-red-600 transition shadow-lg flex items-center gap-2">
-    <i class="fas fa-user-plus"></i> Добавити робітника
-</button>
                         <i class="fas fa-user-circle mr-2"></i> Мій Профіль
                     </a>
                 </div>
@@ -286,7 +306,6 @@ HTML_TEMPLATE = """
             {% else %}
                 <div class="flex items-center space-x-2">
                      <button onclick="toggleModal('login-modal')" class="bg-white text-[#AC0632] px-5 py-1.5 rounded-xl font-bold hover:bg-gray-100 transition-all">Вхід</button>
-                     <button onclick="toggleModal('register-modal')" class="border-2 border-white text-white px-5 py-1.5 rounded-xl font-bold hover:bg-white hover:text-[#AC0632] transition-all">Реєстрація</button>
                 </div>
             {% endif %}
         </div>
@@ -298,7 +317,7 @@ HTML_TEMPLATE = """
             <a href="/?tab=home" class="text-sm whitespace-nowrap"><i class="fas fa-home"></i> Головна</a>
             <a href="/?tab=ranking" class="text-sm whitespace-nowrap"><i class="fas fa-list"></i> Рейтинг</a>
             <a href="/?tab=invitations" class="text-sm whitespace-nowrap"><i class="fas fa-inbox"></i> Inbox</a>
-            {% if session.get('role') == 'ADMIN' %}<a href="/?tab=users" class="text-sm text-purple-400 whitespace-nowrap"><i class="fas fa-users"></i> Юзери</a>{% endif %}
+            {% if session.get('role') == 'ADMIN' %}<a href="/?tab=users" class="text-sm text-purple-400 whitespace-nowrap"><i class="fas fa-user-graduate"></i> Студенти</a><a href="/?tab=companies" class="text-sm text-blue-400 whitespace-nowrap"><i class="fas fa-building"></i> Компанії</a>{% endif %}
             <a href="/?tab=profile" class="text-sm whitespace-nowrap"><i class="fas fa-user"></i> Профіль</a>
         </div>
         {% endif %}
@@ -319,21 +338,13 @@ HTML_TEMPLATE = """
         <!-- ЛЕНДІНГ ПЕЙДЖ -->
         {% if not session.get('user_id') %}
         <div class="landing-hero min-h-[80vh] flex items-center justify-center text-center px-4">
-            <div class="max-w-4xl">
-                <h1 class="text-5xl md:text-7xl font-black uppercase mb-6 drop-shadow-lg">
+            <div class="max-w-4xl mx-auto flex flex-col items-center justify-center">
+                <h1 class="text-5xl md:text-7xl font-black uppercase mb-6 drop-shadow-lg text-center">
                     Знайди Своє <span class="text-red-600">Майбутнє</span>
                 </h1>
-                <p class="text-xl md:text-2xl mb-8 font-light text-gray-200">
+                <p class="text-xl md:text-2xl font-light text-gray-200 text-center">
                     Платформа працевлаштування для студентів Університету Короля Данила.
                 </p>
-                <div class="flex flex-col md:flex-row justify-center gap-4">
-                    <button onclick="toggleModal('register-modal')" class="bg-red-700 text-white px-8 py-4 rounded-full text-xl font-black uppercase hover:bg-red-800 transition shadow-xl transform hover:scale-105">
-                        <i class="fas fa-rocket mr-2"></i> Стати Студентом
-                    </button>
-                    <button onclick="toggleModal('register-modal')" class="bg-white text-black px-8 py-4 rounded-full text-xl font-black uppercase hover:bg-gray-200 transition shadow-xl transform hover:scale-105">
-                        <i class="fas fa-building mr-2"></i> Я Роботодавець
-                    </button>
-                </div>
             </div>
         </div>
         {% else %}
@@ -616,10 +627,10 @@ HTML_TEMPLATE = """
 {% endif %}
 
             <!-- Вкладка: КОРИСТУВАЧІ (Admin Only) -->
-                      {% if active_tab == 'users' and session.get('role') == 'ADMIN' %}
+            {% if active_tab == 'users' and session.get('role') == 'ADMIN' %}
             <section class="w-full max-w-[95%] mx-auto">
-                <h2 class="text-3xl font-black mb-8 uppercase flex items-center gap-3">
-                    <i class="fas fa-users text-purple-400"></i> Управління Користувачами
+                <h2 class="text-3xl font-black mb-6 uppercase flex items-center gap-3">
+                    <i class="fas fa-users text-purple-400"></i> Управління Студентами
                 </h2>
                 <div class="bg-white text-black rounded-3xl shadow-2xl overflow-hidden">
                     <div class="table-wrapper">
@@ -627,91 +638,143 @@ HTML_TEMPLATE = """
                             <thead class="bg-gray-100 border-b-2 border-black">
                                 <tr>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">ID</th>
+                                    <th class="p-4 font-black uppercase whitespace-nowrap">Логін</th>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">Email</th>
-                                    <th class="p-4 font-black uppercase whitespace-nowrap">Посада / Роль</th>
-                                    <th class="p-4 font-black uppercase min-w-[150px]">Company Name</th>
-                                    <th class="p-4 font-black uppercase min-w-[200px]">ПІБ (Прізвище, Ім'я, По-батькові)</th>
-                                    <th class="p-4 font-black uppercase min-w-[150px]">Курс і Спеціальність</th>
-                                    <th class="p-4 font-black uppercase min-w-[250px]">Контактна інформація</th>
+                                    <th class="p-4 font-black uppercase min-w-[200px]">ПІБ</th>
+                                    <th class="p-4 font-black uppercase min-w-[150px]">Курс / Спеціальність</th>
+                                    <th class="p-4 font-black uppercase whitespace-nowrap">Рейтинг</th>
+                                    <th class="p-4 font-black uppercase min-w-[200px]">Контакти</th>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">Статус</th>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">Дії</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
-                                {% for u in all_users %}
+                                {% for u in all_students %}
                                 <tr class="hover:bg-gray-50 transition {% if u.status == 'blocked' %}bg-red-50 opacity-75{% endif %}">
-                                    <td class="p-4 font-bold whitespace-nowrap">{{ u.id }}</td>
-                                    <td class="p-4 font-medium text-blue-700 whitespace-nowrap">{{ u.email or '-' }}</td>
-                                    
+                                    <td class="p-4 font-bold">{{ u.id }}</td>
+                                    <td class="p-4 font-mono text-sm">{{ u.username or '-' }}</td>
+                                    <td class="p-4 text-blue-700">{{ u.email or '-' }}</td>
+                                    <td class="p-4"><b>{{ u.last_name }}</b> {{ u.first_name }} {{ u.patronymic or '' }}</td>
+                                    <td class="p-4">
+                                        <div class="font-bold">{{ u.course or '-' }} курс</div>
+                                        <div class="text-xs text-red-600">{{ u.specialty or '-' }}</div>
+                                    </td>
+                                    <td class="p-4 text-center">
+                                        <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-black">⭐ {{ u.rating or 0 }}</span>
+                                    </td>
+                                    <td class="p-4 text-xs">{{ u.contact_info or '-' }}</td>
                                     <td class="p-4 whitespace-nowrap">
-                                        {% if u.role == 'COMPANY' %}
-                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{{ u.position or 'Представник' }}</span>
-                                        {% elif u.role == 'ADMIN' %}
-                                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-bold">Адміністратор</span>
+                                        {% if u.status == 'blocked' %}
+                                            <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-black uppercase">Заблок.</span>
                                         {% else %}
-                                            <span class="text-gray-400 text-xs">-</span>
+                                            <span class="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-black uppercase">Активний</span>
                                         {% endif %}
                                     </td>
-                                    
-                                    <td class="p-4 font-bold break-words whitespace-normal">
-                                        {% if u.role == 'COMPANY' %}{{ u.company_name or '-' }}{% else %}<span class="text-gray-400 text-xs">-</span>{% endif %}
-                                    </td>
-                                <td class="p-4 break-words whitespace-normal">
-                                    {% if u.role == 'STUDENT' %}
-                                        <b>{{ u.last_name }}</b> {{ u.first_name }} {{ u.patronymic }}
-                                    {% else %}<span class="text-gray-400 text-xs">-</span>{% endif %}
-                                </td>
-                                
-                                <td class="p-4 break-words whitespace-normal">
-                                    {% if u.role == 'STUDENT' %}
-                                        {% if u.course or u.specialty %}
-                                            <div class="font-bold whitespace-nowrap">{{ u.course or '?' }} курс</div>
-                                            <div class="text-xs text-red-600">{{ u.specialty or '-' }}</div>
-                                        {% else %}-{% endif %}
-                                    {% else %}<span class="text-gray-400 text-xs">-</span>{% endif %}
-                                </td>
-                                
-                                <td class="p-4 text-xs min-w-[250px] whitespace-normal break-words">
-                                    {{ u.contact_info or '-' }}
-                                </td>
-                                
-                                <td class="p-4 whitespace-nowrap">
-                                    {% if u.status == 'blocked' %}
-                                        <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-black uppercase">Заблоковано</span>
-                                    {% else %}
-                                        <span class="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-black uppercase">Активний</span>
-                                    {% endif %}
-                                </td>
-                                
-                                <td class="p-4">
-                                    <div class="flex gap-2 items-center min-w-[200px]">
-                                        {% if u.id != session.get('user_id') %}
-                                            <form action="/admin/toggle_block" method="POST" class="inline-block m-0">
+                                    <td class="p-4">
+                                        <div class="flex gap-2">
+                                            <form action="/admin/toggle_block" method="POST" class="m-0">
                                                 <input type="hidden" name="user_id" value="{{ u.id }}">
+                                                <input type="hidden" name="user_type" value="student">
                                                 {% if u.status == 'blocked' %}
-                                                    <button class="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-xs font-bold uppercase whitespace-nowrap" title="Розблокувати"><i class="fas fa-unlock mr-1"></i> Розблок.</button>
+                                                    <button class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold uppercase"><i class="fas fa-unlock mr-1"></i>Розблок.</button>
                                                 {% else %}
-                                                    <button class="bg-orange-500 text-white px-3 py-2 rounded hover:bg-orange-600 text-xs font-bold uppercase whitespace-nowrap" title="Заблокувати" onclick="return confirm('Заблокувати користувача?');"><i class="fas fa-ban mr-1"></i> Блок.</button>
+                                                    <button class="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold uppercase" onclick="return confirm('Заблокувати?')"><i class="fas fa-ban mr-1"></i>Блок.</button>
                                                 {% endif %}
                                             </form>
-                                            <form action="/admin/delete_user" method="POST" class="inline-block m-0" onsubmit="return confirm('ОБЕРЕЖНО! Видалити користувача та всі його дані назавжди?');">
+                                            <form action="/admin/delete_user" method="POST" class="m-0" onsubmit="return confirm('Видалити назавжди?')">
                                                 <input type="hidden" name="user_id" value="{{ u.id }}">
-                                                <button class="bg-red-700 text-white px-3 py-2 rounded hover:bg-black text-xs font-bold uppercase whitespace-nowrap" title="Видалити"><i class="fas fa-trash mr-1"></i> Видалити</button>
+                                                <input type="hidden" name="user_type" value="student">
+                                                <button class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold uppercase"><i class="fas fa-trash mr-1"></i>Видалити</button>
                                             </form>
-                                        {% else %}
-                                            <span class="text-gray-400 text-xs font-bold whitespace-nowrap">Це ви</span>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
             {% endif %}
 
-            <!-- Вкладка: ПРОФІЛЬ (Profile) -->
+            {% if active_tab == 'companies' and session.get('role') == 'ADMIN' %}
+            <section class="w-full max-w-[95%] mx-auto">
+                <h2 class="text-3xl font-black mb-6 uppercase flex items-center gap-3">
+                    <i class="fas fa-building text-blue-400"></i> Компанії та Працівники
+                </h2>
+                {% for comp in all_companies %}
+                <div class="bg-white text-black rounded-3xl shadow-2xl overflow-hidden mb-8 border-l-8 border-blue-500">
+                    <div class="p-6 bg-blue-50 flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <img src="{{ comp.avatar or 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png' }}" class="w-12 h-12 rounded-xl object-contain bg-white border">
+                            <div>
+                                <h3 class="text-xl font-black">{{ comp.company_name }}</h3>
+                                <p class="text-sm text-gray-500">{{ comp.contact_info or '' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="p-3 font-black uppercase text-xs">ID</th>
+                                    <th class="p-3 font-black uppercase text-xs">Логін</th>
+                                    <th class="p-3 font-black uppercase text-xs">Email</th>
+                                    <th class="p-3 font-black uppercase text-xs">Посада</th>
+                                    <th class="p-3 font-black uppercase text-xs">Роль</th>
+                                    <th class="p-3 font-black uppercase text-xs">Статус</th>
+                                    <th class="p-3 font-black uppercase text-xs">Дії</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                {% for emp in comp.employees %}
+                                <tr class="hover:bg-gray-50 {% if emp.status == 'blocked' %}bg-red-50 opacity-75{% endif %}">
+                                    <td class="p-3 font-bold">{{ emp.id }}</td>
+                                    <td class="p-3 font-mono">{{ emp.username or '-' }}</td>
+                                    <td class="p-3 text-blue-700">{{ emp.email }}</td>
+                                    <td class="p-3">{{ emp.position or '-' }}</td>
+                                    <td class="p-3">
+                                        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{{ emp.role }}</span>
+                                    </td>
+                                    <td class="p-3">
+                                        {% if emp.status == 'blocked' %}
+                                            <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-black">Заблок.</span>
+                                        {% else %}
+                                            <span class="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-black">Активний</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="flex gap-2">
+                                            <form action="/admin/toggle_block" method="POST" class="m-0">
+                                                <input type="hidden" name="user_id" value="{{ emp.id }}">
+                                                <input type="hidden" name="user_type" value="employee">
+                                                {% if emp.status == 'blocked' %}
+                                                    <button class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold"><i class="fas fa-unlock"></i></button>
+                                                {% else %}
+                                                    <button class="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold" onclick="return confirm('Заблокувати?')"><i class="fas fa-ban"></i></button>
+                                                {% endif %}
+                                            </form>
+                                            <form action="/admin/delete_user" method="POST" class="m-0" onsubmit="return confirm('Видалити?')">
+                                                <input type="hidden" name="user_id" value="{{ emp.id }}">
+                                                <input type="hidden" name="user_type" value="employee">
+                                                <button class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not comp.employees %}
+                                <tr><td colspan="7" class="p-4 text-center text-gray-400 italic">Немає працівників</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+                        <!-- Вкладка: ПРОФІЛЬ (Profile) -->
             {% if active_tab == 'profile' %}
             <section class="max-w-4xl mx-auto">
                 <div class="bg-white text-black rounded-[2rem] p-8 md:p-12 shadow-2xl relative">
@@ -871,20 +934,29 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
-    <div id="register-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
-        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl max-h-[90vh] overflow-y-auto">
-            <button onclick="toggleModal('register-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
-            <h2 class="text-3xl font-black mb-6 text-center uppercase">Реєстрація</h2>
-            <form action="/register" method="POST" class="space-y-4">
-                <label class="block font-bold mb-1 ml-1 text-gray-500 text-xs uppercase">Оберіть Роль</label>
-                <select name="role" class="w-full p-3 rounded-xl font-bold bg-gray-100 mb-4 border-2 border-black cursor-pointer hover:bg-gray-200 transition">
-                    <option value="STUDENT">👨‍🎓 Студент (Шукаю роботу)</option>
-                    <option value="COMPANY">🏢 Компанія (Шукаю людей)</option>
-                </select>
-                <input type="text" name="username" placeholder="Логін" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border">
-                <input type="email" name="email" placeholder="Email" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border">
-                <input type="password" name="password" placeholder="Пароль" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border">
-                <button class="w-full bg-red-700 text-white py-3 rounded-xl font-black uppercase hover:bg-black transition">Створити акаунт</button>
+    <!-- Адмін: Створити компанію -->
+    <div id="create-company-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
+            <button onclick="toggleModal('create-company-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
+            <h2 class="text-2xl font-black mb-6 uppercase"><i class="fas fa-building mr-2 text-red-600"></i>Створити Компанію</h2>
+            <form action="/admin/create_company" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Назва компанії</label>
+                    <input type="text" name="company_name" required placeholder="TechUkraine LLC" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email директора (логін)</label>
+                    <input type="email" name="email" required placeholder="director@company.com" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Логін директора</label>
+                    <input type="text" name="username" required placeholder="company_admin" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Пароль</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-red-600 text-white py-3 rounded-xl font-black uppercase hover:bg-red-700 transition">Створити компанію</button>
             </form>
         </div>
     </div>
@@ -1062,30 +1134,22 @@ def index():
         students = [dict(row) for row in cur.fetchall()]
 
     # Users Table for Admin
-    all_users = []
-    if active_tab == 'users' and session.get('role') == 'ADMIN':
-        # Адміни
-        for r in db.execute("SELECT * FROM admins").fetchall():
-            row = dict(r)
-            row.update({'role': 'ADMIN', 'company_name': None, 'position': None,
-                        'first_name': None, 'last_name': None, 'patronymic': None,
-                        'course': None, 'specialty': None, 'skills': None,
-                        'links': None, 'contact_info': row.get('contact_info')})
-            all_users.append(row)
-        # Працівники компаній
-        for r in db.execute("""
-            SELECT u.*, c.company_name FROM users u
-            LEFT JOIN companies c ON u.company_id = c.id
-        """).fetchall():
-            row = dict(r)
-            row.update({'first_name': None, 'last_name': None, 'patronymic': None,
-                        'course': None, 'specialty': None, 'skills': None, 'links': None})
-            all_users.append(row)
-        # Студенти
-        for r in db.execute("SELECT * FROM students").fetchall():
-            row = dict(r)
-            row.update({'role': 'STUDENT', 'company_name': None, 'position': None})
-            all_users.append(row)
+    all_students = []
+    all_companies = []
+    if active_tab in ('users', 'companies') and session.get('role') == 'ADMIN':
+        all_students = [dict(r) for r in db.execute("SELECT * FROM students ORDER BY last_name").fetchall()]
+        companies_raw = db.execute("SELECT * FROM companies ORDER BY company_name").fetchall()
+        for comp in companies_raw:
+            c = dict(comp)
+            emps = db.execute("SELECT * FROM users WHERE company_id=? ORDER BY role,username",(c["id"],)).fetchall()
+            c["employees"] = [dict(e) for e in emps]
+            all_companies.append(c)
+    # Завжди завантажуємо компанії (для модалки)
+    if not all_companies:
+        for comp in db.execute("SELECT * FROM companies ORDER BY company_name").fetchall():
+            c = dict(comp)
+            c["employees"] = []
+            all_companies.append(c)
 
     # Profile Data
     user_info = {}
@@ -1121,7 +1185,7 @@ def index():
     pending_count = 0
     
     if session.get('role') == 'STUDENT':
-        count_res = db.execute("SELECT COUNT(*) as c FROM invitations i JOIN students s ON i.student_id = s.id WHERE s.user_id = ? AND i.status='pending'", (session['user_id'],)).fetchone()
+        count_res = db.execute("SELECT COUNT(*) as c FROM invitations i WHERE i.student_id = ? AND i.status='pending'", (session['user_id'],)).fetchone()
         pending_count = count_res['c']
 
     if active_tab == 'invitations':
@@ -1160,7 +1224,9 @@ def index():
     return render_template_string(HTML_TEMPLATE, 
                                   active_tab=active_tab, 
                                   students=students, 
-                                  all_users=all_users,
+                                  all_users=[],
+                                  all_students=all_students,
+                                  all_companies=all_companies,
                                   user_info=user_info, 
                                   profile_data=profile_data,
                                   invitations=invitations,
@@ -1181,12 +1247,9 @@ def register():
     db = get_db()
     try:
         cur = db.cursor()
-        cur.execute("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)", 
-                    (username, password, email, role))
-        user_id = cur.lastrowid
-        
         if role == 'STUDENT':
-            cur.execute("INSERT INTO students (user_id, first_name, last_name) VALUES (?, ?, ?)", (user_id, username, ''))
+            cur.execute("INSERT INTO students (username, email, password, first_name) VALUES (?, ?, ?, ?)", (username, email, password, username))
+            user_id = cur.lastrowid
         elif role == 'COMPANY':
             company_name = request.form.get('company_name') or username
             cur.execute("INSERT INTO companies (company_name) VALUES (?)", (company_name,))
@@ -1290,7 +1353,7 @@ def update_profile():
 
         db.execute("""
             UPDATE students SET first_name=?, last_name=?, patronymic=?, course=?, specialty=?, skills=?, links=?, contact_info=?, avatar=?
-            WHERE user_id=?
+            WHERE id=?
         """, (
             request.form.get('first_name'),
             request.form.get('last_name'),
@@ -1393,34 +1456,35 @@ def flag_invite():
 @app.route('/admin/toggle_block', methods=['POST'])
 def admin_toggle_block():
     if session.get('role') != 'ADMIN': return redirect('/')
-    user_id = request.form.get('user_id')
+    user_id   = request.form.get('user_id')
+    user_type = request.form.get('user_type', 'employee')
     db = get_db()
-    db.execute("UPDATE users SET status = CASE WHEN status = 'blocked' THEN 'active' ELSE 'blocked' END WHERE id = ?", (user_id,))
+    if user_type == 'student':
+        db.execute("UPDATE students SET status = CASE WHEN status='blocked' THEN 'active' ELSE 'blocked' END WHERE id=?", (user_id,))
+        redirect_tab = 'users'
+    else:
+        db.execute("UPDATE users SET status = CASE WHEN status='blocked' THEN 'active' ELSE 'blocked' END WHERE id=?", (user_id,))
+        redirect_tab = 'companies'
     db.commit()
-    flash("Статус користувача змінено.")
-    return redirect('/?tab=users')
+    flash("Статус змінено.")
+    return redirect(f'/?tab={redirect_tab}')
 
 @app.route('/admin/delete_user', methods=['POST'])
 def admin_delete_user():
     if session.get('role') != 'ADMIN': return redirect('/')
-    user_id = request.form.get('user_id')
+    user_id   = request.form.get('user_id')
+    user_type = request.form.get('user_type', 'employee')
     db = get_db()
-    
-    db.execute("""
-        DELETE FROM invitations 
-        WHERE user_id = ? 
-           OR student_id IN (SELECT id FROM students WHERE user_id = ?) 
-           OR company_id IN (SELECT id FROM companies WHERE user_id = ?)
-    """, (user_id, user_id, user_id))
-    
-    db.execute("DELETE FROM students WHERE user_id = ?", (user_id,))
-    db.execute("DELETE FROM companies WHERE user_id = ?", (user_id,))
-    db.execute("DELETE FROM admins WHERE id = ?", (user_id,))
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    db.commit()
-    
-    flash("Користувача та всі його дані успішно видалено назавжди.")
-    return redirect('/?tab=users')
+    if user_type == 'student':
+        db.execute("DELETE FROM invitations WHERE student_id=?", (user_id,))
+        db.execute("DELETE FROM students WHERE id=?", (user_id,))
+        flash("Студента видалено.")
+        return redirect('/?tab=users')
+    else:
+        db.execute("DELETE FROM invitations WHERE user_id=?", (user_id,))
+        db.execute("DELETE FROM users WHERE id=?", (user_id,))
+        flash("Працівника видалено.")
+        return redirect('/?tab=companies')
 
 @app.route('/api/student/<int:user_id>')
 def get_student_api(user_id):
@@ -1430,6 +1494,30 @@ def get_student_api(user_id):
     if std:
         return dict(std)
     return {"error": "Student not found"}, 404
+
+
+
+@app.route('/admin/create_company', methods=['POST'])
+def admin_create_company():
+    if session.get('role') != 'ADMIN':
+        flash("Доступ заборонено.")
+        return redirect('/')
+    company_name = request.form.get('company_name')
+    email        = request.form.get('email')
+    username     = request.form.get('username')
+    password     = request.form.get('password')
+    db = get_db()
+    try:
+        db.execute("INSERT INTO companies (company_name) VALUES (?)", (company_name,))
+        company_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute("INSERT INTO users (username, email, password, role, company_id, position, status) VALUES (?, ?, ?, 'COMPANY_ADMIN', ?, 'Директор', 'active')", (username, email, password, company_id))
+        new_user_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute("UPDATE companies SET user_id=? WHERE id=?", (new_user_id, company_id))
+        db.commit()
+        flash(f"Компанію '{company_name}' створено! Директор: {username}")
+    except Exception as e:
+        flash(f"Помилка: {e}")
+    return redirect('/?tab=users')
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE):
