@@ -106,6 +106,28 @@ def init_db():
             )
         ''')
             
+        # 6. Таблиця повідомлень підтримки
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS support_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_type TEXT NOT NULL,
+                sender_id INTEGER,
+                sender_name TEXT,
+                message TEXT NOT NULL,
+                reply TEXT,
+                replied_at TIMESTAMP,
+                session_key TEXT,
+                is_read INTEGER DEFAULT 0,
+                is_archived INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Add is_archived column if missing (for existing DBs)
+        try:
+            cursor.execute("ALTER TABLE support_messages ADD COLUMN is_archived INTEGER DEFAULT 0")
+        except Exception:
+            pass
+
         db.commit()
         
         # Створення дефолтного адміна
@@ -193,35 +215,13 @@ HTML_TEMPLATE = """
         input, select, textarea { border: 2px solid #ddd; transition: 0.3s; color: black; }
         input:focus, select:focus, textarea:focus { border-color: var(--ukd-bright); outline: none; }
         .modal-bg { background: rgba(0,0,0,0.9); }
-        <div id="add-employee-modal" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center">
-        <div class="bg-white p-10 rounded-[30px] w-full max-w-md relative shadow-2xl border-l-8 border-red-600">
-            <button onclick="toggleModal('add-employee-modal')" class="absolute top-6 right-6 text-gray-400 hover:text-black transition text-xl"><i class="fas fa-times"></i></button>
-            <h2 class="text-3xl font-black uppercase mb-6 tracking-tight">Новий Рекрутер</h2>
-            <form action="/company/add_employee" method="POST" class="space-y-5">
-                <div>
-                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email Працівника (Логін)</label>
-                    <input type="email" name="email" required placeholder="hr@company.com" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
-                </div>
-                <div>
-                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Посада</label>
-                    <input type="text" name="position" required placeholder="Напр: HR Менеджер" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
-                </div>
-                <div>
-                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Тимчасовий Пароль</label>
-                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-600 outline-none transition">
-                </div>
-                <button type="submit" class="w-full bg-red-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 transition shadow-lg mt-4">Зареєструвати працівника</button>
-            </form>
-        </div>
-    </div>
         .landing-hero { background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://yt3.googleusercontent.com/ytc/AIdro_k624OQvH_3vjA4H8U1fQvX5Q5x5x5x5x5x5x5x5=s900-c-k-c0x00ffffff-no-rj'); background-size: cover; background-position: center; }
         .table-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
-
-    <!-- Навігація -->
- <nav class="p-4 sticky top-0 z-50 shadow-2xl" style="background-color: #AC0632 !important; border-bottom: 2px solid rgba(255,255,255,0.1);">
+        <!-- Навігація -->
+    <nav class="p-4 sticky top-0 z-50 shadow-2xl" style="background-color: #a91825 !important; border-bottom: 2px solid rgba(255,255,255,0.1);">
     <div class="container mx-auto flex items-center justify-between">
         
         <div class="flex items-center space-x-3 cursor-pointer shrink-0" onclick="window.location.href='/'">
@@ -233,7 +233,7 @@ HTML_TEMPLATE = """
 
         <div class="flex items-center ml-auto">
             {% if session.get('user_id') %}
-                <div class="hidden md:flex items-center space-x-1">
+                <div class="flex items-center space-x-1">
                     <a href="/?tab=home" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'home' else '' }}">
                         <i class="fas fa-home mr-2"></i> Головна
                     </a>
@@ -241,56 +241,132 @@ HTML_TEMPLATE = """
                         <i class="fas fa-list-ol mr-2"></i> Рейтинг
                     </a>
                     
-                    {% if session.get('role') == 'ADMIN' %}
-                        <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
-                            <i class="fas fa-shield-alt mr-2"></i> Адмін Панель
-                        </a>
-                        <a href="/?tab=users" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'users' else '' }}">
-                            <i class="fas fa-users mr-2"></i> Користувачі
-                        </a>
+                     {% if session.get('role') == 'ADMIN' %}
+
+                    <div class="relative group mx-2">
+
+                        <button class="px-4 py-2 bg-black/40 text-white font-bold rounded-xl transition-all hover:bg-black/60 flex items-center border border-white/10">
+
+                            <i class="fas fa-user-shield mr-2"></i>
+
+                            <span>Адміністрування</span>
+
+                            <i class="fas fa-chevron-down ml-2 text-xs transition group-hover:rotate-180"></i>
+
+                        </button>
+
+                        <div class="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] transform origin-top scale-95 group-hover:scale-100">
+
+                            <p class="px-4 py-1 text-[10px] font-black text-gray-400 uppercase tracking-widest">Керування</p>
+
+                            <a href="/?tab=invitations" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition"><i class="fas fa-shield-alt w-5"></i> Адмін Панель</a>
+
+                            <a href="/?tab=users" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition"><i class="fas fa-user-graduate w-5"></i> Студенти</a>
+
+                            <a href="/?tab=companies" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition"><i class="fas fa-building w-5"></i> Компанії</a>
+
+                           
+
+                            <a href="/?tab=support" class="flex items-center justify-between px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition">
+
+                                <div class="flex items-center gap-3">
+
+                                    <i class="fas fa-headset w-5"></i> Підтримка
+
+                                </div>
+
+                                {% if unread_support_count and unread_support_count > 0 %}
+
+                                <span class="bg-[#AC0632] text-white text-[10px] px-2 py-0.5 rounded-full font-black">{{ unread_support_count }}</span>
+
+                                {% endif %}
+
+                            </a>
+
+
+
+                           <div class="border-t-2 border-[#AC0632]/20 my-2 mx-2"></div>
+
+                            <button onclick="toggleModal('create-company-modal')" class="w-full text-left flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 transition"><i class="fas fa-plus-circle w-5 text-green-600"></i> Нова компанія</button>
+
+                            <button onclick="toggleModal('add-employee-modal')" class="w-full text-left flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 transition"><i class="fas fa-user-plus w-5 text-blue-600"></i> Додати робітника</button>
+
+                        </div>
+
+                    </div>
+
                     {% endif %}
 
-                    {% if session.get('role') in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}
-                         <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
-                            <i class="fas fa-paper-plane mr-2"></i> Мої Запити
-                        </a>
-                    {% endif %}
-                    
+
+
                     {% if session.get('role') == 'STUDENT' %}
-                         <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
-                            <i class="fas fa-inbox mr-2"></i> Мої Запрошення 
-                            {% if pending_count > 0 %}
-                            <span class="bg-white text-[#AC0632] text-[10px] px-1.5 py-0.5 rounded-full ml-1 font-black animate-pulse">{{ pending_count }}</span>
-                            {% endif %}
+
+                        <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
+
+                            <i class="fas fa-inbox mr-2"></i> Мої Запрошення
+
                         </a>
+
+                    {% elif session.get('role') in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}
+
+                        <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
+
+                            <i class="fas fa-paper-plane mr-2"></i> Запити
+
+                        </a>
+
                     {% endif %}
+
+
 
                     <a href="/?tab=profile" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'profile' else '' }}">
-                    <button onclick="toggleModal('add-employee-modal')" class="bg-black text-white px-6 py-3 rounded-xl font-bold uppercase tracking-wider hover:bg-red-600 transition shadow-lg flex items-center gap-2">
-    <i class="fas fa-user-plus"></i> Добавити робітника
-</button>
-                        <i class="fas fa-user-circle mr-2"></i> Мій Профіль
+
+                        <i class="fas fa-user-circle mr-2"></i> Профіль
+
                     </a>
+
+
+
+                    <div class="flex items-center space-x-3 ml-4 pl-4 border-l border-white/20">
+
+                        <div class="text-right hidden sm:block">
+
+                            <div class="text-[10px] text-white/70 uppercase font-black leading-tight">{{ session.get('role') }}</div>
+
+                            <div class="text-sm text-white font-bold leading-none">{{ session.get('username') }}</div>
+
+                        </div>
+
+                        <a href="/logout" class="bg-white/10 hover:bg-red-600 p-2 rounded-full text-white transition flex items-center justify-center w-9 h-9">
+
+                            <i class="fas fa-sign-out-alt"></i>
+
+                        </a>
+
+                    </div>
+
                 </div>
 
-                <div class="flex items-center space-x-3 ml-4 pl-4 border-l border-white/20">
-                    <div class="text-right hidden sm:block">
-                        <div class="text-[10px] text-white/70 uppercase font-black">{{ session.get('role') }}</div>
-                        <div class="text-sm text-white font-bold leading-none">{{ session.get('username') }}</div>
-                    </div>
-                    <a href="/logout" class="bg-white/10 hover:bg-white/30 p-2 rounded-full text-white transition">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </a>
-                </div>
+
 
             {% else %}
-                <div class="flex items-center space-x-2">
-                     <button onclick="toggleModal('login-modal')" class="bg-white text-[#AC0632] px-5 py-1.5 rounded-xl font-bold hover:bg-gray-100 transition-all">Вхід</button>
-                     <button onclick="toggleModal('register-modal')" class="border-2 border-white text-white px-5 py-1.5 rounded-xl font-bold hover:bg-white hover:text-[#AC0632] transition-all">Реєстрація</button>
+
+                <div class="flex items-center">
+
+                     <button onclick="toggleModal('login-modal')" class="bg-white text-[#AC0632] px-6 py-2 rounded-xl font-bold hover:bg-gray-100 transition-all shadow-lg uppercase text-xs tracking-widest flex items-center gap-2">
+
+                        <i class="fas fa-sign-in-alt"></i> Вхід
+
+                     </button>
+
                 </div>
+
             {% endif %}
+
         </div>
+
     </div>
+
 </nav>
         <!-- Мобільне меню -->
         {% if session.get('user_id') %}
@@ -298,7 +374,7 @@ HTML_TEMPLATE = """
             <a href="/?tab=home" class="text-sm whitespace-nowrap"><i class="fas fa-home"></i> Головна</a>
             <a href="/?tab=ranking" class="text-sm whitespace-nowrap"><i class="fas fa-list"></i> Рейтинг</a>
             <a href="/?tab=invitations" class="text-sm whitespace-nowrap"><i class="fas fa-inbox"></i> Inbox</a>
-            {% if session.get('role') == 'ADMIN' %}<a href="/?tab=users" class="text-sm text-purple-400 whitespace-nowrap"><i class="fas fa-users"></i> Юзери</a>{% endif %}
+            {% if session.get('role') == 'ADMIN' %}<a href="/?tab=users" class="text-sm text-purple-400 whitespace-nowrap"><i class="fas fa-user-graduate"></i> Студенти</a><a href="/?tab=companies" class="text-sm text-blue-400 whitespace-nowrap"><i class="fas fa-building"></i> Компанії</a>{% endif %}
             <a href="/?tab=profile" class="text-sm whitespace-nowrap"><i class="fas fa-user"></i> Профіль</a>
         </div>
         {% endif %}
@@ -317,22 +393,48 @@ HTML_TEMPLATE = """
         {% endwith %}
 
         <!-- ЛЕНДІНГ ПЕЙДЖ -->
-        {% if not session.get('user_id') %}
-        <div class="landing-hero min-h-[80vh] flex items-center justify-center text-center px-4">
-            <div class="max-w-4xl">
-                <h1 class="text-5xl md:text-7xl font-black uppercase mb-6 drop-shadow-lg">
+      {% if not session.get('user_id') %}
+        <div class="min-h-[80vh] flex items-center justify-center text-center px-4" style="background-image: url('/static/images/your-background.jpg'); background-size: cover; background-position: center;">
+            <div class="max-w-4xl mx-auto flex flex-col items-center justify-center">
+                <h1 class="text-5xl md:text-7xl font-black uppercase mb-6 drop-shadow-lg text-center">
                     Знайди Своє <span class="text-red-600">Майбутнє</span>
                 </h1>
-                <p class="text-xl md:text-2xl mb-8 font-light text-gray-200">
+                <p class="text-xl md:text-2xl font-light text-gray-200 text-center">
                     Платформа працевлаштування для студентів Університету Короля Данила.
                 </p>
-                <div class="flex flex-col md:flex-row justify-center gap-4">
-                    <button onclick="toggleModal('register-modal')" class="bg-red-700 text-white px-8 py-4 rounded-full text-xl font-black uppercase hover:bg-red-800 transition shadow-xl transform hover:scale-105">
-                        <i class="fas fa-rocket mr-2"></i> Стати Студентом
-                    </button>
-                    <button onclick="toggleModal('register-modal')" class="bg-white text-black px-8 py-4 rounded-full text-xl font-black uppercase hover:bg-gray-200 transition shadow-xl transform hover:scale-105">
-                        <i class="fas fa-building mr-2"></i> Я Роботодавець
-                    </button>
+                <button onclick="toggleModal('guest-chat-modal')" class="mt-8 inline-flex items-center gap-3 bg-[#AC0632] hover:bg-red-800 text-white px-8 py-4 rounded-full font-black uppercase transition shadow-xl border border-red-400 hover:border-white transform hover:scale-105">
+                    <i class="fas fa-headset text-2xl"></i> Чат Підтримки
+                </button>
+            </div>
+        </div>
+
+        <!-- Модальний чат для гостей -->
+        <div id="guest-chat-modal" class="hidden fixed inset-0 modal-bg z-[200] flex items-center justify-center p-4">
+            <div class="bg-white text-black rounded-3xl w-full max-w-md relative shadow-2xl flex flex-col" style="max-height:90vh;">
+                <div class="flex items-center justify-between p-5 border-b border-gray-100 bg-[#AC0632] rounded-t-3xl">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-white p-2 rounded-full"><i class="fas fa-headset text-[#AC0632] text-lg"></i></div>
+                        <div>
+                            <div class="text-white font-black text-lg uppercase">Підтримка УКД</div>
+                            <div class="text-red-200 text-xs">Напишіть своє питання</div>
+                        </div>
+                    </div>
+                    <button onclick="toggleModal('guest-chat-modal')" class="text-white text-2xl hover:text-red-200 transition">&times;</button>
+                </div>
+                <div id="guest-chat-messages" class="flex-1 overflow-y-auto p-5 space-y-3 bg-gray-50" style="min-height:200px;max-height:350px;">
+                    <div class="flex gap-2 items-start">
+                        <div class="bg-[#AC0632] text-white p-2 rounded-full w-8 h-8 flex items-center justify-center shrink-0"><i class="fas fa-robot text-xs"></i></div>
+                        <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm max-w-[80%]">Вітаємо! Якщо у вас є питання щодо платформи — напишіть нам. Адміністратор відповість якнайшвидше.</div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-100 bg-white rounded-b-3xl">
+                    <div class="mb-2">
+                        <input type="text" id="guest-name-input" placeholder="Ваше ім'я (необов'язково)" class="w-full p-2 rounded-xl bg-gray-100 border text-sm mb-2 focus:border-[#AC0632] outline-none">
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="guest-chat-input" placeholder="Напишіть повідомлення..." class="flex-1 p-3 rounded-xl bg-gray-100 border text-sm focus:border-[#AC0632] outline-none" onkeydown="if(event.key==='Enter') sendGuestMessage()">
+                        <button onclick="sendGuestMessage()" class="bg-[#AC0632] text-white px-4 py-2 rounded-xl hover:bg-red-800 transition"><i class="fas fa-paper-plane"></i></button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -344,9 +446,9 @@ HTML_TEMPLATE = """
             <!-- Вкладка: ГОЛОВНА (Home) -->
             {% if active_tab == 'home' %}
           <section class="max-w-6xl mx-auto text-center py-8">
-                <h1 class="text-4xl md:text-6xl font-black uppercase mb-6 drop-shadow-lg tracking-tighter">
-                    Ласкаво просимо до <span class="text-red-600">УКД Talent</span>
-                </h1>
+                <<h1 class="text-4xl md:text-6xl font-black uppercase mb-6 drop-shadow-lg tracking-tighter text-white">
+    Ласкаво просимо до <span class="text-red-600">УКД Talent</span>
+</h1>
                 <p class="text-lg md:text-xl mb-12 font-light text-gray-200 max-w-3xl mx-auto">
                     Платформа, що об'єднує найкращих студентів та провідних роботодавців для побудови успішного майбутнього.
                 </p>
@@ -372,11 +474,37 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="mt-8 border-t border-white/20 pt-12 pb-6">
-                    <p class="text-gray-400 font-bold uppercase mb-6">Відкритий вихідний код проєкту на GitHub:</p>
-                    <a href="https://github.com/YuraFedorets/TeamProject/tree/V3" target="_blank" class="inline-flex items-center gap-3 bg-gray-800 hover:bg-black text-white px-8 py-4 rounded-full font-black uppercase transition shadow-xl border border-gray-600 hover:border-gray-400 transform hover:scale-105">
-                        <i class="fab fa-github text-3xl"></i> 
-                        TeamProject / V3
-                    </a>
+                    <p class="text-gray-400 font-bold uppercase mb-6">Потрібна допомога? Напишіть нам:</p>
+                    <button onclick="toggleUserChat()" class="inline-flex items-center gap-3 bg-[#AC0632] hover:bg-red-800 text-white px-8 py-4 rounded-full font-black uppercase transition shadow-xl border border-red-400 hover:border-white transform hover:scale-105">
+                        <i class="fas fa-headset text-2xl"></i> Чат Підтримки
+                        <span id="user-chat-badge" class="hidden bg-white text-[#AC0632] text-xs px-2 py-0.5 rounded-full font-black animate-pulse">!</span>
+                    </button>
+                </div>
+
+                <!-- Чат підтримки для залогінених -->
+                <div id="user-support-chat" class="hidden fixed bottom-6 right-6 z-[200] w-96 bg-white rounded-3xl shadow-2xl flex flex-col border border-gray-200" style="max-height:520px;">
+                    <div class="flex items-center justify-between p-4 bg-[#AC0632] rounded-t-3xl">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-white p-2 rounded-full"><i class="fas fa-headset text-[#AC0632]"></i></div>
+                            <div>
+                                <div class="text-white font-black uppercase">Підтримка</div>
+                                <div class="text-red-200 text-xs">Адмін відповість незабаром</div>
+                            </div>
+                        </div>
+                        <button onclick="toggleUserChat()" class="text-white text-2xl hover:text-red-200">&times;</button>
+                    </div>
+                    <div id="user-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50" style="min-height:200px;max-height:320px;">
+                        <div class="flex gap-2 items-start">
+                            <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-robot text-xs"></i></div>
+                            <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">Вітаємо, {{ session.get('username') }}! Чим можемо допомогти?</div>
+                        </div>
+                    </div>
+                    <div class="p-3 border-t border-gray-100 bg-white rounded-b-3xl">
+                        <div class="flex gap-2">
+                            <input type="text" id="user-chat-input" placeholder="Напишіть повідомлення..." class="flex-1 p-2.5 rounded-xl bg-gray-100 border text-sm focus:border-[#AC0632] outline-none" onkeydown="if(event.key==='Enter') sendUserMessage()">
+                            <button onclick="sendUserMessage()" class="bg-[#AC0632] text-white px-3 py-2 rounded-xl hover:bg-red-800 transition"><i class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </div>
                 </div>
             </section>
             {% endif %}
@@ -539,8 +667,8 @@ HTML_TEMPLATE = """
             <table class="w-full text-left min-w-max">
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
-                        {% if session.get('role') != 'COMPANY' %}<th class="p-5 font-black uppercase text-xs text-gray-400">Від Кого</th>{% endif %}
-                        {% if session.get('role') != 'STUDENT' %}<th class="p-5 font-black uppercase text-xs text-gray-400">Кому (Студент)</th>{% endif %}
+                        {% if session.get('role') not in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}<th class="p-5 font-black uppercase text-xs text-gray-400">Від Кого</th>{% endif %}
+                        {% if session.get('role') not in ['STUDENT'] %}<th class="p-5 font-black uppercase text-xs text-gray-400">Кому (Студент)</th>{% endif %}
                         <th class="p-5 font-black uppercase text-xs text-gray-400">Повідомлення</th>
                         <th class="p-5 font-black uppercase text-xs text-gray-400">Статус</th>
                         <th class="p-5 font-black uppercase text-xs text-gray-400 text-center">Дії</th>
@@ -549,7 +677,7 @@ HTML_TEMPLATE = """
                 <tbody class="divide-y divide-gray-100">
                     {% for inv in invitations %}
                     <tr class="hover:bg-gray-50/80 transition-all {% if session.get('role') == 'ADMIN' and inv.flagged %}bg-red-50/50{% endif %}">
-                        {% if session.get('role') != 'COMPANY' %}
+                        {% if session.get('role') not in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}
                         <td class="p-5">
                             <div class="flex items-center space-x-3">
                                 <img src="{{ inv.company_avatar or 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png' }}" class="w-10 h-10 rounded-xl object-cover shadow-sm">
@@ -561,7 +689,7 @@ HTML_TEMPLATE = """
                         </td>
                         {% endif %}
                         
-                        {% if session.get('role') != 'STUDENT' %}
+                        {% if session.get('role') not in ['STUDENT'] %}
                         <td class="p-5">
                             <span class="font-bold text-gray-800">{{ inv.last_name }} {{ inv.first_name }}</span>
                         </td>
@@ -596,6 +724,15 @@ HTML_TEMPLATE = """
                                     </form>
                                 {% endif %}
                                 
+                                {% if session.get('role') in ['COMPANY_ADMIN', 'EMPLOYEE'] %}
+                                    <form action="/delete_invite" method="POST" class="m-0" onsubmit="return confirm('Видалити запит?');">
+                                        <input type="hidden" name="invite_id" value="{{ inv.id }}">
+                                        <button class="w-9 h-9 flex items-center justify-center bg-gray-100 text-gray-400 hover:bg-[#AC0632] hover:text-white rounded-xl transition-all">
+                                            <i class="fas fa-trash-alt text-sm"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+
                                 {% if session.get('role') == 'ADMIN' %}
                                     <form action="/delete_invite" method="POST" class="m-0" onsubmit="return confirm('Видалити назавжди?');">
                                         <input type="hidden" name="invite_id" value="{{ inv.id }}">
@@ -616,10 +753,10 @@ HTML_TEMPLATE = """
 {% endif %}
 
             <!-- Вкладка: КОРИСТУВАЧІ (Admin Only) -->
-                      {% if active_tab == 'users' and session.get('role') == 'ADMIN' %}
+            {% if active_tab == 'users' and session.get('role') == 'ADMIN' %}
             <section class="w-full max-w-[95%] mx-auto">
-                <h2 class="text-3xl font-black mb-8 uppercase flex items-center gap-3">
-                    <i class="fas fa-users text-purple-400"></i> Управління Користувачами
+                <h2 class="text-3xl font-black mb-6 uppercase flex items-center gap-3">
+                    <i class="fas fa-users text-purple-400"></i> Управління Студентами
                 </h2>
                 <div class="bg-white text-black rounded-3xl shadow-2xl overflow-hidden">
                     <div class="table-wrapper">
@@ -627,91 +764,246 @@ HTML_TEMPLATE = """
                             <thead class="bg-gray-100 border-b-2 border-black">
                                 <tr>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">ID</th>
+                                    <th class="p-4 font-black uppercase whitespace-nowrap">Логін</th>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">Email</th>
-                                    <th class="p-4 font-black uppercase whitespace-nowrap">Посада / Роль</th>
-                                    <th class="p-4 font-black uppercase min-w-[150px]">Company Name</th>
-                                    <th class="p-4 font-black uppercase min-w-[200px]">ПІБ (Прізвище, Ім'я, По-батькові)</th>
-                                    <th class="p-4 font-black uppercase min-w-[150px]">Курс і Спеціальність</th>
-                                    <th class="p-4 font-black uppercase min-w-[250px]">Контактна інформація</th>
+                                    <th class="p-4 font-black uppercase min-w-[200px]">ПІБ</th>
+                                    <th class="p-4 font-black uppercase min-w-[150px]">Курс / Спеціальність</th>
+                                    <th class="p-4 font-black uppercase whitespace-nowrap">Рейтинг</th>
+                                    <th class="p-4 font-black uppercase min-w-[200px]">Контакти</th>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">Статус</th>
                                     <th class="p-4 font-black uppercase whitespace-nowrap">Дії</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
-                                {% for u in all_users %}
+                                {% for u in all_students %}
                                 <tr class="hover:bg-gray-50 transition {% if u.status == 'blocked' %}bg-red-50 opacity-75{% endif %}">
-                                    <td class="p-4 font-bold whitespace-nowrap">{{ u.id }}</td>
-                                    <td class="p-4 font-medium text-blue-700 whitespace-nowrap">{{ u.email or '-' }}</td>
-                                    
+                                    <td class="p-4 font-bold">{{ u.id }}</td>
+                                    <td class="p-4 font-mono text-sm">{{ u.username or '-' }}</td>
+                                    <td class="p-4 text-blue-700">{{ u.email or '-' }}</td>
+                                    <td class="p-4"><b>{{ u.last_name }}</b> {{ u.first_name }} {{ u.patronymic or '' }}</td>
+                                    <td class="p-4">
+                                        <div class="font-bold">{{ u.course or '-' }} курс</div>
+                                        <div class="text-xs text-red-600">{{ u.specialty or '-' }}</div>
+                                    </td>
+                                    <td class="p-4 text-center">
+                                        <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-black">⭐ {{ u.rating or 0 }}</span>
+                                    </td>
+                                    <td class="p-4 text-xs">{{ u.contact_info or '-' }}</td>
                                     <td class="p-4 whitespace-nowrap">
-                                        {% if u.role == 'COMPANY' %}
-                                            <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{{ u.position or 'Представник' }}</span>
-                                        {% elif u.role == 'ADMIN' %}
-                                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-bold">Адміністратор</span>
+                                        {% if u.status == 'blocked' %}
+                                            <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-black uppercase">Заблок.</span>
                                         {% else %}
-                                            <span class="text-gray-400 text-xs">-</span>
+                                            <span class="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-black uppercase">Активний</span>
                                         {% endif %}
                                     </td>
-                                    
-                                    <td class="p-4 font-bold break-words whitespace-normal">
-                                        {% if u.role == 'COMPANY' %}{{ u.company_name or '-' }}{% else %}<span class="text-gray-400 text-xs">-</span>{% endif %}
-                                    </td>
-                                <td class="p-4 break-words whitespace-normal">
-                                    {% if u.role == 'STUDENT' %}
-                                        <b>{{ u.last_name }}</b> {{ u.first_name }} {{ u.patronymic }}
-                                    {% else %}<span class="text-gray-400 text-xs">-</span>{% endif %}
-                                </td>
-                                
-                                <td class="p-4 break-words whitespace-normal">
-                                    {% if u.role == 'STUDENT' %}
-                                        {% if u.course or u.specialty %}
-                                            <div class="font-bold whitespace-nowrap">{{ u.course or '?' }} курс</div>
-                                            <div class="text-xs text-red-600">{{ u.specialty or '-' }}</div>
-                                        {% else %}-{% endif %}
-                                    {% else %}<span class="text-gray-400 text-xs">-</span>{% endif %}
-                                </td>
-                                
-                                <td class="p-4 text-xs min-w-[250px] whitespace-normal break-words">
-                                    {{ u.contact_info or '-' }}
-                                </td>
-                                
-                                <td class="p-4 whitespace-nowrap">
-                                    {% if u.status == 'blocked' %}
-                                        <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-black uppercase">Заблоковано</span>
-                                    {% else %}
-                                        <span class="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-black uppercase">Активний</span>
-                                    {% endif %}
-                                </td>
-                                
-                                <td class="p-4">
-                                    <div class="flex gap-2 items-center min-w-[200px]">
-                                        {% if u.id != session.get('user_id') %}
-                                            <form action="/admin/toggle_block" method="POST" class="inline-block m-0">
+                                    <td class="p-4">
+                                        <div class="flex gap-2">
+                                            <form action="/admin/toggle_block" method="POST" class="m-0">
                                                 <input type="hidden" name="user_id" value="{{ u.id }}">
+                                                <input type="hidden" name="user_type" value="student">
                                                 {% if u.status == 'blocked' %}
-                                                    <button class="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-xs font-bold uppercase whitespace-nowrap" title="Розблокувати"><i class="fas fa-unlock mr-1"></i> Розблок.</button>
+                                                    <button class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold uppercase"><i class="fas fa-unlock mr-1"></i>Розблок.</button>
                                                 {% else %}
-                                                    <button class="bg-orange-500 text-white px-3 py-2 rounded hover:bg-orange-600 text-xs font-bold uppercase whitespace-nowrap" title="Заблокувати" onclick="return confirm('Заблокувати користувача?');"><i class="fas fa-ban mr-1"></i> Блок.</button>
+                                                    <button class="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold uppercase" onclick="return confirm('Заблокувати?')"><i class="fas fa-ban mr-1"></i>Блок.</button>
                                                 {% endif %}
                                             </form>
-                                            <form action="/admin/delete_user" method="POST" class="inline-block m-0" onsubmit="return confirm('ОБЕРЕЖНО! Видалити користувача та всі його дані назавжди?');">
+                                            <form action="/admin/delete_user" method="POST" class="m-0" onsubmit="return confirm('Видалити назавжди?')">
                                                 <input type="hidden" name="user_id" value="{{ u.id }}">
-                                                <button class="bg-red-700 text-white px-3 py-2 rounded hover:bg-black text-xs font-bold uppercase whitespace-nowrap" title="Видалити"><i class="fas fa-trash mr-1"></i> Видалити</button>
+                                                <input type="hidden" name="user_type" value="student">
+                                                <button class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold uppercase"><i class="fas fa-trash mr-1"></i>Видалити</button>
                                             </form>
-                                        {% else %}
-                                            <span class="text-gray-400 text-xs font-bold whitespace-nowrap">Це ви</span>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
             {% endif %}
 
-            <!-- Вкладка: ПРОФІЛЬ (Profile) -->
+            {% if active_tab == 'companies' and session.get('role') == 'ADMIN' %}
+            <section class="w-full max-w-[95%] mx-auto">
+                <h2 class="text-3xl font-black mb-6 uppercase flex items-center gap-3">
+                    <i class="fas fa-building text-blue-400"></i> Компанії та Працівники
+                </h2>
+                {% for comp in all_companies %}
+                <div class="bg-white text-black rounded-3xl shadow-2xl overflow-hidden mb-8 border-l-8 border-blue-500">
+                    <div class="p-6 bg-blue-50 flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <img src="{{ comp.avatar or 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png' }}" class="w-12 h-12 rounded-xl object-contain bg-white border">
+                            <div>
+                                <h3 class="text-xl font-black">{{ comp.company_name }}</h3>
+                                <p class="text-sm text-gray-500">{{ comp.contact_info or '' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="p-3 font-black uppercase text-xs">ID</th>
+                                    <th class="p-3 font-black uppercase text-xs">Логін</th>
+                                    <th class="p-3 font-black uppercase text-xs">Email</th>
+                                    <th class="p-3 font-black uppercase text-xs">Посада</th>
+                                    <th class="p-3 font-black uppercase text-xs">Роль</th>
+                                    <th class="p-3 font-black uppercase text-xs">Статус</th>
+                                    <th class="p-3 font-black uppercase text-xs">Дії</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                {% for emp in comp.employees %}
+                                <tr class="hover:bg-gray-50 {% if emp.status == 'blocked' %}bg-red-50 opacity-75{% endif %}">
+                                    <td class="p-3 font-bold">{{ emp.id }}</td>
+                                    <td class="p-3 font-mono">{{ emp.username or '-' }}</td>
+                                    <td class="p-3 text-blue-700">{{ emp.email }}</td>
+                                    <td class="p-3">{{ emp.position or '-' }}</td>
+                                    <td class="p-3">
+                                        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">{{ emp.role }}</span>
+                                    </td>
+                                    <td class="p-3">
+                                        {% if emp.status == 'blocked' %}
+                                            <span class="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-black">Заблок.</span>
+                                        {% else %}
+                                            <span class="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-black">Активний</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="flex gap-2">
+                                            <form action="/admin/toggle_block" method="POST" class="m-0">
+                                                <input type="hidden" name="user_id" value="{{ emp.id }}">
+                                                <input type="hidden" name="user_type" value="employee">
+                                                {% if emp.status == 'blocked' %}
+                                                    <button class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold"><i class="fas fa-unlock"></i></button>
+                                                {% else %}
+                                                    <button class="bg-orange-500 text-white px-3 py-1.5 rounded text-xs font-bold" onclick="return confirm('Заблокувати?')"><i class="fas fa-ban"></i></button>
+                                                {% endif %}
+                                            </form>
+                                            <form action="/admin/delete_user" method="POST" class="m-0" onsubmit="return confirm('Видалити?')">
+                                                <input type="hidden" name="user_id" value="{{ emp.id }}">
+                                                <input type="hidden" name="user_type" value="employee">
+                                                <button class="bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold"><i class="fas fa-trash"></i></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not comp.employees %}
+                                <tr><td colspan="7" class="p-4 text-center text-gray-400 italic">Немає працівників</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Вкладка: ЧАТ ПІДТРИМКИ (Admin Only) -->
+            {% if active_tab == 'support' and session.get('role') == 'ADMIN' %}
+            <section class="w-full max-w-5xl mx-auto">
+                <h2 class="text-3xl font-black mb-6 uppercase flex items-center gap-3 text-white">
+                    <i class="fas fa-headset text-red-400"></i> Чат Підтримки
+                </h2>
+                <div class="grid md:grid-cols-3 gap-6">
+                    <!-- Список діалогів -->
+                    <div class="bg-white text-black rounded-3xl shadow-xl overflow-hidden">
+                        <div class="p-4 bg-gray-50 border-b flex items-center justify-between">
+                            <span class="font-black uppercase text-sm text-gray-500">Діалоги</span>
+                            {% if show_archived %}
+                            <a href="/?tab=support" class="text-xs text-[#AC0632] font-bold hover:underline">← Активні</a>
+                            {% else %}
+                            <a href="/?tab=support&show_archived=1" class="text-xs text-gray-400 hover:text-[#AC0632] font-bold">Архів</a>
+                            {% endif %}
+                        </div>
+                        <div class="divide-y divide-gray-100 overflow-y-auto" style="max-height:500px;">
+                            {% for conv in support_conversations %}
+                            <div class="flex items-center gap-2 p-3 hover:bg-gray-50 transition {% if conv.session_key == active_conv_key %}bg-red-50 border-l-4 border-[#AC0632]{% endif %}">
+                                <a href="/?tab=support&conv_key={{ conv.session_key }}{% if show_archived %}&show_archived=1{% endif %}" class="flex items-center gap-2 min-w-0 flex-1">
+                                    <div class="w-9 h-9 rounded-full bg-[#AC0632] flex items-center justify-center text-white font-black text-sm shrink-0">
+                                        {{ (conv.sender_name or 'Г')[0].upper() }}
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="font-bold text-sm truncate">{{ conv.sender_name or 'Гість' }}</div>
+                                        <div class="text-xs text-gray-400 truncate">{{ conv.last_message or '' }}</div>
+                                    </div>
+                                    {% if conv.unread_count > 0 %}
+                                    <span class="bg-[#AC0632] text-white text-[10px] px-1.5 py-0.5 rounded-full ml-auto font-black shrink-0">{{ conv.unread_count }}</span>
+                                    {% endif %}
+                                </a>
+                                <div class="flex flex-col gap-1 shrink-0">
+                                    {% if not show_archived %}
+                                    <form action="/admin/support_archive" method="POST" class="m-0">
+                                        <input type="hidden" name="conv_key" value="{{ conv.session_key }}">
+                                        <input type="hidden" name="action" value="archive">
+                                        <button title="Архівувати" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-yellow-500 hover:bg-yellow-50 rounded-lg transition text-xs"><i class="fas fa-archive"></i></button>
+                                    </form>
+                                    {% else %}
+                                    <form action="/admin/support_archive" method="POST" class="m-0">
+                                        <input type="hidden" name="conv_key" value="{{ conv.session_key }}">
+                                        <input type="hidden" name="action" value="unarchive">
+                                        <button title="Відновити" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-green-500 hover:bg-green-50 rounded-lg transition text-xs"><i class="fas fa-inbox"></i></button>
+                                    </form>
+                                    {% endif %}
+                                    <form action="/admin/support_archive" method="POST" class="m-0" onsubmit="return confirm('Видалити цей діалог назавжди?')">
+                                        <input type="hidden" name="conv_key" value="{{ conv.session_key }}">
+                                        <input type="hidden" name="action" value="delete">
+                                        <button title="Видалити" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition text-xs"><i class="fas fa-trash"></i></button>
+                                    </form>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="p-6 text-center text-gray-400 text-sm italic">Немає повідомлень</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <!-- Чат -->
+                    <div class="md:col-span-2 bg-white text-black rounded-3xl shadow-xl flex flex-col overflow-hidden" style="max-height:560px;">
+                        {% if active_conv_key %}
+                        <div class="p-4 bg-gray-50 border-b font-black text-sm flex items-center gap-2">
+                            <i class="fas fa-user text-[#AC0632]"></i> 
+                            {{ active_conv_sender or 'Гість' }}
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+                            {% for msg in active_conv_messages %}
+                            <div class="flex gap-2 items-start {% if msg.sender_type == 'admin' %}flex-row-reverse{% endif %}">
+                                <div class="{% if msg.sender_type == 'admin' %}bg-[#AC0632]{% else %}bg-gray-300{% endif %} text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                                    <i class="fas {% if msg.sender_type == 'admin' %}fa-user-shield{% else %}fa-user{% endif %} text-xs"></i>
+                                </div>
+                                <div class="{% if msg.sender_type == 'admin' %}bg-[#AC0632] text-white{% else %}bg-white{% endif %} rounded-2xl {% if msg.sender_type == 'admin' %}rounded-tr-none{% else %}rounded-tl-none{% endif %} p-3 shadow-sm text-sm max-w-[75%]">
+                                    {{ msg.message }}
+                                    <div class="text-[10px] {% if msg.sender_type == 'admin' %}text-red-200{% else %}text-gray-400{% endif %} mt-1">{{ msg.created_at }}</div>
+                                </div>
+                            </div>
+                            {% if msg.reply %}
+                            <div class="flex gap-2 items-start flex-row-reverse">
+                                <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-user-shield text-xs"></i></div>
+                                <div class="bg-[#AC0632] text-white rounded-2xl rounded-tr-none p-3 shadow-sm text-sm max-w-[75%]">
+                                    {{ msg.reply }}
+                                    <div class="text-[10px] text-red-200 mt-1">{{ msg.replied_at }}</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        <form action="/admin/support_reply" method="POST" class="p-4 border-t flex gap-2 bg-white">
+                            <input type="hidden" name="conv_key" value="{{ active_conv_key }}">
+                            <input type="hidden" name="last_msg_id" value="{{ active_conv_messages[-1].id if active_conv_messages else '' }}">
+                            <input type="text" name="reply" placeholder="Відповідь..." required class="flex-1 p-2.5 rounded-xl bg-gray-100 border text-sm focus:border-[#AC0632] outline-none">
+                            <button class="bg-[#AC0632] text-white px-4 py-2 rounded-xl hover:bg-red-800 transition font-bold"><i class="fas fa-paper-plane mr-1"></i> Надіслати</button>
+                        </form>
+                        {% else %}
+                        <div class="flex-1 flex items-center justify-center text-gray-400 text-sm italic p-8 text-center">
+                            <div><i class="fas fa-comments text-4xl mb-4 block"></i>Оберіть діалог зліва</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+                        <!-- Вкладка: ПРОФІЛЬ (Profile) -->
             {% if active_tab == 'profile' %}
             <section class="max-w-4xl mx-auto">
                 <div class="bg-white text-black rounded-[2rem] p-8 md:p-12 shadow-2xl relative">
@@ -726,16 +1018,16 @@ HTML_TEMPLATE = """
                     </h2>
 
                     <form action="/update_profile" method="POST" class="space-y-6">
-                        <!-- Загальні поля -->
-                        <div class="grid md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border">
-                            <div>
-                                <label class="label-text">Логін</label>
-                                <input type="text" value="{{ user_info.username }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed font-mono">
-                            </div>
-                            <div>
-                                <label class="label-text">Email</label>
-                                <input type="email" name="email" value="{{ user_info.email }}" class="w-full p-3 rounded-xl bg-white font-bold border focus:border-red-500">
-                            </div>
+                        <!-- Загальні поля: Логін = Email -->
+                        <div class="bg-gray-50 p-4 rounded-xl border">
+                            <label class="label-text">Логін / Email</label>
+                            {% if session.get('role') == 'ADMIN' %}
+                            <input type="email" name="email" value="{{ user_info.email or user_info.username or '' }}" class="w-full p-3 rounded-xl bg-white font-bold border focus:border-red-500" placeholder="email@example.com">
+                            <p class="text-xs text-gray-400 mt-1">Логін і email є одним і тим самим. Зміна оновить обидва поля.</p>
+                            {% else %}
+                            <input type="email" value="{{ user_info.email or user_info.username or '' }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed font-mono">
+                            <p class="text-xs text-gray-400 mt-1">Логін та email не можна змінювати самостійно. Зверніться до адміністратора.</p>
+                            {% endif %}
                         </div>
 
                         {% if user_info.role == 'STUDENT' %}
@@ -753,29 +1045,60 @@ HTML_TEMPLATE = """
                             <div class="grid md:grid-cols-3 gap-4">
                                 <div>
                                     <label class="label-text">Прізвище</label>
+                                    {% if session.get('role') == 'ADMIN' %}
                                     <input type="text" name="last_name" value="{{ profile_data.last_name or '' }}" class="w-full p-3 rounded-xl border">
+                                    {% else %}
+                                    <input type="text" value="{{ profile_data.last_name or '' }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed">
+                                    <input type="hidden" name="last_name" value="{{ profile_data.last_name or '' }}">
+                                    {% endif %}
                                 </div>
                                 <div>
                                     <label class="label-text">Ім'я</label>
+                                    {% if session.get('role') == 'ADMIN' %}
                                     <input type="text" name="first_name" value="{{ profile_data.first_name or '' }}" class="w-full p-3 rounded-xl border">
+                                    {% else %}
+                                    <input type="text" value="{{ profile_data.first_name or '' }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed">
+                                    <input type="hidden" name="first_name" value="{{ profile_data.first_name or '' }}">
+                                    {% endif %}
                                 </div>
                                 <div>
                                     <label class="label-text">По батькові</label>
+                                    {% if session.get('role') == 'ADMIN' %}
                                     <input type="text" name="patronymic" value="{{ profile_data.patronymic or '' }}" class="w-full p-3 rounded-xl border">
+                                    {% else %}
+                                    <input type="text" value="{{ profile_data.patronymic or '' }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed">
+                                    <input type="hidden" name="patronymic" value="{{ profile_data.patronymic or '' }}">
+                                    {% endif %}
                                 </div>
                             </div>
+                            {% if session.get('role') != 'ADMIN' %}
+                            <p class="text-xs text-gray-400 -mt-2"><i class="fas fa-lock mr-1"></i> ПІБ може редагувати лише адміністратор.</p>
+                            {% endif %}
                             
                             <!-- Навчання -->
                             <div class="grid md:grid-cols-2 gap-4">
                                 <div>
                                     <label class="label-text">Курс</label>
+                                    {% if session.get('role') == 'ADMIN' %}
                                     <input type="number" name="course" value="{{ profile_data.course or '' }}" class="w-full p-3 rounded-xl border" placeholder="1-6">
+                                    {% else %}
+                                    <input type="number" value="{{ profile_data.course or '' }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed">
+                                    <input type="hidden" name="course" value="{{ profile_data.course or '' }}">
+                                    {% endif %}
                                 </div>
                                 <div>
                                     <label class="label-text">Спеціальність</label>
+                                    {% if session.get('role') == 'ADMIN' %}
                                     <input type="text" name="specialty" value="{{ profile_data.specialty or '' }}" class="w-full p-3 rounded-xl border" placeholder="Наприклад: Інженерія ПЗ">
+                                    {% else %}
+                                    <input type="text" value="{{ profile_data.specialty or '' }}" disabled class="w-full p-3 rounded-xl bg-gray-200 cursor-not-allowed">
+                                    <input type="hidden" name="specialty" value="{{ profile_data.specialty or '' }}">
+                                    {% endif %}
                                 </div>
                             </div>
+                            {% if session.get('role') != 'ADMIN' %}
+                            <p class="text-xs text-gray-400 -mt-2"><i class="fas fa-lock mr-1"></i> Курс та спеціальність може змінювати лише адміністратор.</p>
+                            {% endif %}
 
                             <div class="grid md:grid-cols-[auto_1fr] gap-4 items-start pt-2">
                                 <img src="{{ profile_data.avatar }}" class="w-20 h-20 rounded-full border bg-gray-100 object-cover">
@@ -871,20 +1194,29 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
-    <div id="register-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
-        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl max-h-[90vh] overflow-y-auto">
-            <button onclick="toggleModal('register-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
-            <h2 class="text-3xl font-black mb-6 text-center uppercase">Реєстрація</h2>
-            <form action="/register" method="POST" class="space-y-4">
-                <label class="block font-bold mb-1 ml-1 text-gray-500 text-xs uppercase">Оберіть Роль</label>
-                <select name="role" class="w-full p-3 rounded-xl font-bold bg-gray-100 mb-4 border-2 border-black cursor-pointer hover:bg-gray-200 transition">
-                    <option value="STUDENT">👨‍🎓 Студент (Шукаю роботу)</option>
-                    <option value="COMPANY">🏢 Компанія (Шукаю людей)</option>
-                </select>
-                <input type="text" name="username" placeholder="Логін" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border">
-                <input type="email" name="email" placeholder="Email" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border">
-                <input type="password" name="password" placeholder="Пароль" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border">
-                <button class="w-full bg-red-700 text-white py-3 rounded-xl font-black uppercase hover:bg-black transition">Створити акаунт</button>
+    <!-- Адмін: Створити компанію -->
+    <div id="create-company-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
+            <button onclick="toggleModal('create-company-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
+            <h2 class="text-2xl font-black mb-6 uppercase"><i class="fas fa-building mr-2 text-red-600"></i>Створити Компанію</h2>
+            <form action="/admin/create_company" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Назва компанії</label>
+                    <input type="text" name="company_name" required placeholder="TechUkraine LLC" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email директора (логін)</label>
+                    <input type="email" name="email" required placeholder="director@company.com" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Логін директора</label>
+                    <input type="text" name="username" required placeholder="company_admin" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Пароль</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-red-600 text-white py-3 rounded-xl font-black uppercase hover:bg-red-700 transition">Створити компанію</button>
             </form>
         </div>
     </div>
@@ -905,44 +1237,311 @@ HTML_TEMPLATE = """
 
     <!-- Перегляд студента -->
     <div id="student-view-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
-        <div class="bg-white text-black p-0 rounded-3xl w-full max-w-lg relative shadow-2xl overflow-hidden">
-            <div class="h-28 bg-gradient-to-r from-red-900 to-black w-full relative">
-                <button onclick="toggleModal('student-view-modal')" class="absolute top-4 right-4 text-white text-2xl font-bold hover:scale-110 transition">&times;</button>
-            </div>
-            <div class="px-8 pb-8 text-center -mt-14">
-                <img id="sv-avatar" src="" class="w-28 h-28 rounded-full border-4 border-white shadow-lg mx-auto bg-gray-200 object-cover">
-                <h2 id="sv-name" class="text-3xl font-black uppercase mt-4 tracking-tight"></h2>
-                <p id="sv-spec" class="text-red-600 font-bold mb-6 text-lg"></p>
-                
-                <div class="text-left bg-gray-50 p-6 rounded-2xl space-y-4 text-sm border">
-                    <div>
-                        <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Навички</span>
-                        <p id="sv-skills" class="font-medium bg-white p-2 rounded border"></p>
-                    </div>
-                    
-                    <div>
-                        <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Контактна інформація</span>
-                        <p id="sv-contact-info" class="font-bold text-gray-800 bg-white p-2 rounded border truncate"></p>
-                    </div>
+    <div class="bg-white text-black p-0 rounded-3xl w-full max-w-lg relative shadow-2xl overflow-hidden">
+        
+        <div class="relative w-full">
+            <button onclick="toggleModal('student-view-modal')" 
+                    class="absolute top-4 right-4 text-gray-400 hover:text-red-600 text-3xl font-light transition z-50">
+                &times;
+            </button>
+        </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Link (Мережі)</span>
-                            <p id="sv-links" class="text-blue-600 flex gap-3 flex-wrap mt-1"></p>
-                        </div>
-                        <div>
-                            <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Email</span>
-                            <p id="sv-email" class="text-gray-800 font-bold truncate mt-1"></p>
-                        </div>
+        <div class="px-8 pb-8 text-center pt-10">
+            <div class="w-32 h-32 mx-auto mb-4">
+                <img id="sv-avatar" src="" 
+                     class="w-full h-full rounded-full border-4 border-gray-100 shadow-md object-contain bg-white p-1">
+            </div>
+            
+            <h2 id="sv-name" class="text-3xl font-black uppercase tracking-tight"></h2>
+            <p id="sv-spec" class="text-red-600 font-bold mb-6 text-lg"></p>
+            
+            <div class="text-left bg-gray-50 p-6 rounded-2xl space-y-4 text-sm border border-gray-200">
+                <div>
+                    <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Навички</span>
+                    <p id="sv-skills" class="font-medium bg-white p-2 rounded border border-gray-100"></p>
+                </div>
+                
+                <div>
+                    <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Контактна інформація</span>
+                    <p id="sv-contact-info" class="font-bold text-gray-800 bg-white p-2 rounded border border-gray-100 truncate"></p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Link (Мережі)</span>
+                        <div id="sv-links" class="text-blue-600 flex gap-3 flex-wrap mt-1"></div>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Email</span>
+                        <p id="sv-email" class="text-gray-800 font-bold truncate mt-1"></p>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+    <!-- Адмін: Додати робітника до компанії -->
+    <div id="add-employee-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black rounded-3xl w-full max-w-lg relative shadow-2xl border-l-8 border-red-600 overflow-hidden">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-[#AC0632] to-red-800 p-6">
+                <button onclick="toggleModal('add-employee-modal')" class="absolute top-4 right-5 text-white/70 hover:text-white text-2xl font-bold transition">&times;</button>
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-3 rounded-xl"><i class="fas fa-user-plus text-white text-xl"></i></div>
+                    <div>
+                        <h2 class="text-2xl font-black text-white uppercase tracking-tight">Новий Робітник</h2>
+                        <p class="text-red-200 text-sm">Додавання працівника до компанії</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Body -->
+            <form action="/admin/add_employee" method="POST" class="p-6 space-y-4">
+
+                <!-- Вибір компанії з пошуком -->
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-building text-[#AC0632] mr-1"></i> Компанія
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="company-search-input" placeholder="Пошук компанії..." autocomplete="off"
+                            class="w-full p-3 pl-10 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none text-sm transition"
+                            oninput="filterCompanies(this.value)">
+                        <i class="fas fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
+                    </div>
+                    <div id="company-dropdown" class="mt-1 border-2 border-gray-200 rounded-xl overflow-hidden hidden" style="max-height:180px;overflow-y:auto;">
+                        {% for comp in all_companies %}
+                        <div class="company-option flex items-center gap-3 p-3 hover:bg-red-50 cursor-pointer transition border-b border-gray-100 last:border-0"
+                             data-id="{{ comp.id }}" data-name="{{ comp.company_name }}"
+                             onclick="selectCompany({{ comp.id }}, '{{ comp.company_name }}')">
+                            <img src="{{ comp.avatar or 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png' }}" class="w-8 h-8 rounded-lg object-contain bg-gray-100 border shrink-0">
+                            <div>
+                                <div class="font-bold text-sm">{{ comp.company_name }}</div>
+                                {% if comp.contact_info %}<div class="text-xs text-gray-400">{{ comp.contact_info }}</div>{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <!-- Обрана компанія -->
+                    <div id="selected-company-display" class="hidden mt-2 flex items-center gap-3 bg-red-50 border-2 border-red-200 p-3 rounded-xl">
+                        <i class="fas fa-check-circle text-[#AC0632]"></i>
+                        <span id="selected-company-name" class="font-bold text-sm text-[#AC0632]"></span>
+                        <button type="button" onclick="clearCompany()" class="ml-auto text-gray-400 hover:text-red-600 text-xs">✕ Змінити</button>
+                    </div>
+                    <input type="hidden" name="company_id" id="company-id-hidden" required>
+                </div>
+
+                <!-- Email / Логін -->
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-envelope text-[#AC0632] mr-1"></i> Email / Логін
+                    </label>
+                    <input type="email" name="email" required placeholder="hr@company.com"
+                        class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none transition text-sm">
+                    <p class="text-xs text-gray-400 mt-1">Email буде використовуватись як логін для входу</p>
+                </div>
+
+                <!-- Посада -->
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-briefcase text-[#AC0632] mr-1"></i> Посада
+                    </label>
+                    <input type="text" name="position" required placeholder="HR Менеджер, Рекрутер, Аналітик..."
+                        class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none transition text-sm">
+                </div>
+
+                <!-- Пароль -->
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-lock text-[#AC0632] mr-1"></i> Пароль
+                    </label>
+                    <div class="relative">
+                        <input type="password" name="password" id="emp-password" required placeholder="••••••••"
+                            class="w-full p-3 pr-12 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none transition text-sm">
+                        <button type="button" onclick="toggleEmpPassword()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-700 transition">
+                            <i class="fas fa-eye" id="emp-pass-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" id="add-emp-submit-btn" disabled
+                    class="w-full bg-gray-300 text-gray-500 py-3.5 rounded-xl font-black uppercase tracking-widest transition cursor-not-allowed"
+                    style="transition:all 0.2s">
+                    <i class="fas fa-user-plus mr-2"></i>Додати Робітника
+                </button>
+                <p id="add-emp-hint" class="text-xs text-center text-gray-400">Спочатку оберіть компанію</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Компанія: Додати робітника -->
+    <div id="company-add-employee-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl border-l-8 border-blue-500">
+            <button onclick="toggleModal('company-add-employee-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
+            <h2 class="text-2xl font-black mb-2 uppercase"><i class="fas fa-user-plus mr-2 text-blue-600"></i>Новий Робітник</h2>
+            <p class="text-sm text-gray-500 mb-6">Додавання до вашої компанії</p>
+            <form action="/company/add_employee" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email / Логін</label>
+                    <input type="email" name="email" required placeholder="employee@company.com" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-blue-500 outline-none">
+                    <p class="text-xs text-gray-400 mt-1">Email буде використовуватись як логін</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Посада</label>
+                    <input type="text" name="position" required placeholder="HR Менеджер, Рекрутер..." class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Пароль</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-blue-500 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase hover:bg-blue-700 transition">Додати до компанії</button>
+            </form>
         </div>
     </div>
 
     <script>
         function toggleModal(id) {
             document.getElementById(id).classList.toggle('hidden');
+        }
+
+        // --- Admin Add Employee: Company search ---
+        function filterCompanies(val) {
+            const dropdown = document.getElementById('company-dropdown');
+            const options = dropdown.querySelectorAll('.company-option');
+            const q = val.toLowerCase().trim();
+            dropdown.classList.remove('hidden');
+            let visible = 0;
+            options.forEach(opt => {
+                const name = opt.dataset.name.toLowerCase();
+                const show = !q || name.includes(q);
+                opt.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            if (!q && visible === 0) dropdown.classList.add('hidden');
+        }
+
+        function selectCompany(id, name) {
+            document.getElementById('company-id-hidden').value = id;
+            document.getElementById('selected-company-name').textContent = name;
+            document.getElementById('selected-company-display').classList.remove('hidden');
+            document.getElementById('company-dropdown').classList.add('hidden');
+            document.getElementById('company-search-input').value = '';
+            // Enable submit button
+            const btn = document.getElementById('add-emp-submit-btn');
+            btn.disabled = false;
+            btn.className = 'w-full bg-[#AC0632] text-white py-3.5 rounded-xl font-black uppercase tracking-widest hover:bg-red-800 transition cursor-pointer';
+            document.getElementById('add-emp-hint').classList.add('hidden');
+        }
+
+        function clearCompany() {
+            document.getElementById('company-id-hidden').value = '';
+            document.getElementById('selected-company-display').classList.add('hidden');
+            document.getElementById('company-search-input').value = '';
+            document.getElementById('company-dropdown').classList.add('hidden');
+            const btn = document.getElementById('add-emp-submit-btn');
+            btn.disabled = true;
+            btn.className = 'w-full bg-gray-300 text-gray-500 py-3.5 rounded-xl font-black uppercase tracking-widest transition cursor-not-allowed';
+            document.getElementById('add-emp-hint').classList.remove('hidden');
+        }
+
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const inp = document.getElementById('company-search-input');
+            const drop = document.getElementById('company-dropdown');
+            if (inp && drop && !inp.contains(e.target) && !drop.contains(e.target)) {
+                drop.classList.add('hidden');
+            }
+        });
+
+        function toggleEmpPassword() {
+            const inp = document.getElementById('emp-password');
+            const eye = document.getElementById('emp-pass-eye');
+            if (inp.type === 'password') { inp.type = 'text'; eye.className = 'fas fa-eye-slash'; }
+            else { inp.type = 'password'; eye.className = 'fas fa-eye'; }
+        }
+
+        // Support Chat for guests
+        function sendGuestMessage() {
+            const input = document.getElementById('guest-chat-input');
+            const nameInput = document.getElementById('guest-name-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+            
+            const messagesDiv = document.getElementById('guest-chat-messages');
+            messagesDiv.innerHTML += `<div class="flex gap-2 items-start flex-row-reverse">
+                <div class="bg-gray-300 p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-user text-xs text-gray-600"></i></div>
+                <div class="bg-white rounded-2xl rounded-tr-none p-3 shadow-sm text-sm max-w-[80%]">${msg}</div>
+            </div>`;
+            
+            fetch('/support/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `message=${encodeURIComponent(msg)}&sender_name=${encodeURIComponent(nameInput.value || 'Гість')}`
+            }).then(() => {
+                messagesDiv.innerHTML += `<div class="flex gap-2 items-start">
+                    <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-robot text-xs"></i></div>
+                    <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">Дякуємо! Адміністратор отримав ваше повідомлення і відповість найближчим часом.</div>
+                </div>`;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            });
+            input.value = '';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Support Chat for logged-in users
+        function toggleUserChat() {
+            const chat = document.getElementById('user-support-chat');
+            if (chat) {
+                chat.classList.toggle('hidden');
+                if (!chat.classList.contains('hidden')) loadUserChatHistory();
+            }
+        }
+
+        function loadUserChatHistory() {
+            fetch('/support/history')
+                .then(r => r.json())
+                .then(msgs => {
+                    const div = document.getElementById('user-chat-messages');
+                    if (!div) return;
+                    let extra = '';
+                    msgs.forEach(m => {
+                        const isAdmin = m.sender_type === 'admin';
+                        extra += `<div class="flex gap-2 items-start ${isAdmin ? 'flex-row-reverse' : ''}">
+                            <div class="${isAdmin ? 'bg-[#AC0632]' : 'bg-gray-300'} text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                                <i class="fas ${isAdmin ? 'fa-user-shield' : 'fa-user'} text-xs"></i>
+                            </div>
+                            <div class="${isAdmin ? 'bg-[#AC0632] text-white rounded-tr-none' : 'bg-white rounded-tl-none'} rounded-2xl p-3 shadow-sm text-sm max-w-[75%]">${m.message}</div>
+                        </div>`;
+                    });
+                    if (extra) {
+                        div.innerHTML = div.innerHTML + extra;
+                        div.scrollTop = div.scrollHeight;
+                    }
+                });
+        }
+
+        function sendUserMessage() {
+            const input = document.getElementById('user-chat-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+            const div = document.getElementById('user-chat-messages');
+            div.innerHTML += `<div class="flex gap-2 items-start flex-row-reverse">
+                <div class="bg-gray-300 p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-user text-xs text-gray-600"></i></div>
+                <div class="bg-white rounded-2xl rounded-tr-none p-3 shadow-sm text-sm max-w-[75%]">${msg}</div>
+            </div>`;
+            fetch('/support/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `message=${encodeURIComponent(msg)}`
+            }).then(() => {
+                div.innerHTML += `<div class="flex gap-2 items-start">
+                    <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-robot text-xs"></i></div>
+                    <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">Повідомлення отримано! Адміністратор відповість незабаром.</div>
+                </div>`;
+                div.scrollTop = div.scrollHeight;
+            });
+            input.value = '';
+            div.scrollTop = div.scrollHeight;
         }
         
         function openInviteModal(id, name) {
@@ -1062,30 +1661,22 @@ def index():
         students = [dict(row) for row in cur.fetchall()]
 
     # Users Table for Admin
-    all_users = []
-    if active_tab == 'users' and session.get('role') == 'ADMIN':
-        # Адміни
-        for r in db.execute("SELECT * FROM admins").fetchall():
-            row = dict(r)
-            row.update({'role': 'ADMIN', 'company_name': None, 'position': None,
-                        'first_name': None, 'last_name': None, 'patronymic': None,
-                        'course': None, 'specialty': None, 'skills': None,
-                        'links': None, 'contact_info': row.get('contact_info')})
-            all_users.append(row)
-        # Працівники компаній
-        for r in db.execute("""
-            SELECT u.*, c.company_name FROM users u
-            LEFT JOIN companies c ON u.company_id = c.id
-        """).fetchall():
-            row = dict(r)
-            row.update({'first_name': None, 'last_name': None, 'patronymic': None,
-                        'course': None, 'specialty': None, 'skills': None, 'links': None})
-            all_users.append(row)
-        # Студенти
-        for r in db.execute("SELECT * FROM students").fetchall():
-            row = dict(r)
-            row.update({'role': 'STUDENT', 'company_name': None, 'position': None})
-            all_users.append(row)
+    all_students = []
+    all_companies = []
+    if active_tab in ('users', 'companies') and session.get('role') == 'ADMIN':
+        all_students = [dict(r) for r in db.execute("SELECT * FROM students ORDER BY last_name").fetchall()]
+        companies_raw = db.execute("SELECT * FROM companies ORDER BY company_name").fetchall()
+        for comp in companies_raw:
+            c = dict(comp)
+            emps = db.execute("SELECT * FROM users WHERE company_id=? ORDER BY role,username",(c["id"],)).fetchall()
+            c["employees"] = [dict(e) for e in emps]
+            all_companies.append(c)
+    # Завжди завантажуємо компанії (для модалки)
+    if not all_companies:
+        for comp in db.execute("SELECT * FROM companies ORDER BY company_name").fetchall():
+            c = dict(comp)
+            c["employees"] = []
+            all_companies.append(c)
 
     # Profile Data
     user_info = {}
@@ -1095,10 +1686,36 @@ def index():
         role = session.get('role')
 
         if role == 'ADMIN':
-            row = db.execute("SELECT * FROM admins WHERE id = ?", (target_id,)).fetchone()
-            user_info = dict(row) if row else {}
-            user_info['role'] = 'ADMIN'
-            profile_data = user_info
+            # Якщо адмін редагує іншого користувача
+            if session.get('edit_target_id'):
+                # Спочатку шукаємо серед студентів
+                row = db.execute("SELECT * FROM students WHERE id = ?", (target_id,)).fetchone()
+                if row:
+                    user_info = dict(row)
+                    user_info['role'] = 'STUDENT'
+                    profile_data = user_info
+                else:
+                    # Шукаємо серед users (company/employee)
+                    row = db.execute("SELECT * FROM users WHERE id = ?", (target_id,)).fetchone()
+                    if row:
+                        user_info = dict(row)
+                        comp_id = user_info.get('company_id')
+                        if comp_id:
+                            cur2 = db.execute("SELECT * FROM companies WHERE id = ?", (comp_id,))
+                            profile_data = dict(cur2.fetchone() or {})
+                        else:
+                            profile_data = {}
+                    else:
+                        # Редагуємо самого адміна
+                        row = db.execute("SELECT * FROM admins WHERE id = ?", (session['user_id'],)).fetchone()
+                        user_info = dict(row) if row else {}
+                        user_info['role'] = 'ADMIN'
+                        profile_data = user_info
+            else:
+                row = db.execute("SELECT * FROM admins WHERE id = ?", (target_id,)).fetchone()
+                user_info = dict(row) if row else {}
+                user_info['role'] = 'ADMIN'
+                profile_data = user_info
 
         elif role == 'STUDENT':
             row = db.execute("SELECT * FROM students WHERE id = ?", (target_id,)).fetchone()
@@ -1121,7 +1738,7 @@ def index():
     pending_count = 0
     
     if session.get('role') == 'STUDENT':
-        count_res = db.execute("SELECT COUNT(*) as c FROM invitations i JOIN students s ON i.student_id = s.id WHERE s.user_id = ? AND i.status='pending'", (session['user_id'],)).fetchone()
+        count_res = db.execute("SELECT COUNT(*) as c FROM invitations i WHERE i.student_id = ? AND i.status='pending'", (session['user_id'],)).fetchone()
         pending_count = count_res['c']
 
     if active_tab == 'invitations':
@@ -1146,6 +1763,23 @@ def index():
             """
             invitations = [dict(row) for row in db.execute(query, (session['user_id'],)).fetchall()]
             
+        elif session.get('role') in ('COMPANY_ADMIN', 'EMPLOYEE'):
+            # Компанія бачить всі запити від своєї компанії
+            comp_id = session.get('company_id')
+            if comp_id:
+                query = """
+                    SELECT i.*, s.first_name, s.last_name, s.avatar as student_avatar,
+                           c.company_name, c.avatar as company_avatar
+                    FROM invitations i
+                    JOIN students s ON i.student_id = s.id
+                    LEFT JOIN companies c ON i.company_id = c.id
+                    WHERE i.company_id = ?
+                    ORDER BY i.created_at DESC
+                """
+                invitations = [dict(row) for row in db.execute(query, (comp_id,)).fetchall()]
+            else:
+                invitations = []
+            
         elif session.get('role') == 'STUDENT':
             query = """
                 SELECT i.*, c.company_name, c.avatar as company_avatar
@@ -1157,50 +1791,91 @@ def index():
             """
             invitations = [dict(row) for row in db.execute(query, (session['user_id'],)).fetchall()]
 
+    # Support chat data
+    unread_support_count = 0
+    support_conversations = []
+    active_conv_key = None
+    active_conv_messages = []
+    active_conv_sender = None
+    show_archived = bool(request.args.get('show_archived'))
+    
+    if session.get('role') == 'ADMIN':
+        unread_res = db.execute("SELECT COUNT(*) as c FROM support_messages WHERE is_read=0 AND sender_type != 'admin' AND is_archived=0").fetchone()
+        unread_support_count = unread_res['c'] if unread_res else 0
+        
+        if active_tab == 'support':
+            archived_filter = "AND sm.is_archived=1" if show_archived else "AND sm.is_archived=0"
+            convs = db.execute(f"""
+                SELECT session_key, sender_name,
+                       MAX(created_at) as last_time,
+                       (SELECT message FROM support_messages sm2 WHERE sm2.session_key = sm.session_key ORDER BY sm2.created_at DESC LIMIT 1) as last_message,
+                       SUM(CASE WHEN is_read=0 AND sender_type != 'admin' THEN 1 ELSE 0 END) as unread_count
+                FROM support_messages sm
+                WHERE sender_type != 'admin' {archived_filter}
+                GROUP BY session_key
+                ORDER BY last_time DESC
+            """).fetchall()
+            support_conversations = [dict(c) for c in convs]
+            
+            active_conv_key = request.args.get('conv_key') or (support_conversations[0]['session_key'] if support_conversations else None)
+            if active_conv_key:
+                msgs = db.execute("SELECT * FROM support_messages WHERE session_key=? ORDER BY created_at ASC", (active_conv_key,)).fetchall()
+                active_conv_messages = [dict(m) for m in msgs]
+                db.execute("UPDATE support_messages SET is_read=1 WHERE session_key=? AND sender_type!='admin'", (active_conv_key,))
+                db.commit()
+                sender_row = db.execute("SELECT sender_name FROM support_messages WHERE session_key=? AND sender_type!='admin' LIMIT 1", (active_conv_key,)).fetchone()
+                active_conv_sender = sender_row['sender_name'] if sender_row else 'Гість'
+
     return render_template_string(HTML_TEMPLATE, 
                                   active_tab=active_tab, 
                                   students=students, 
-                                  all_users=all_users,
+                                  all_users=[],
+                                  all_students=all_students,
+                                  all_companies=all_companies,
                                   user_info=user_info, 
                                   profile_data=profile_data,
                                   invitations=invitations,
                                   pending_count=pending_count,
                                   current_filters=current_filters,
                                   unique_courses=unique_courses,
-                                  unique_specialties=unique_specialties)
+                                  unique_specialties=unique_specialties,
+                                  unread_support_count=unread_support_count,
+                                  support_conversations=support_conversations,
+                                  active_conv_key=active_conv_key,
+                                  active_conv_messages=active_conv_messages,
+                                  active_conv_sender=active_conv_sender,
+                                  show_archived=show_archived)
 
 # --- АВТОРИЗАЦІЯ ---
 
 @app.route('/register', methods=['POST'])
 def register():
     role = request.form.get('role')
-    username = request.form.get('username')
-    email = request.form.get('email')
+    email = (request.form.get('email') or request.form.get('username') or '').strip()
+    username = email  # email = username
     password = request.form.get('password')
     
     db = get_db()
     try:
         cur = db.cursor()
-        cur.execute("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)", 
-                    (username, password, email, role))
-        user_id = cur.lastrowid
-        
         if role == 'STUDENT':
-            cur.execute("INSERT INTO students (user_id, first_name, last_name) VALUES (?, ?, ?)", (user_id, username, ''))
+            cur.execute("INSERT INTO students (username, email, password, first_name) VALUES (?, ?, ?, ?)", (email, email, password, email))
+            user_id = cur.lastrowid
         elif role == 'COMPANY':
-            company_name = request.form.get('company_name') or username
+            company_name = request.form.get('company_name') or email
             cur.execute("INSERT INTO companies (company_name) VALUES (?)", (company_name,))
             company_id = cur.lastrowid
-            cur.execute("UPDATE users SET company_id=?, role='COMPANY_ADMIN', position='Головний керівник' WHERE id=?", (company_id, user_id))
+            cur.execute("INSERT INTO users (username, email, password, role, company_id, position, status) VALUES (?, ?, ?, 'COMPANY_ADMIN', ?, 'Директор', 'active')", (email, email, password, company_id))
+            user_id = cur.lastrowid
             cur.execute("UPDATE companies SET user_id=? WHERE id=?", (user_id, company_id))
             
         db.commit()
         session['user_id'] = user_id
         session['role'] = role
-        session['username'] = username
+        session['username'] = email
         flash("Вітаємо! Ваш акаунт створено.")
     except sqlite3.IntegrityError:
-        flash("Помилка: Такий логін вже зайнятий.")
+        flash("Помилка: Такий email вже зареєстровано.")
         
     return redirect('/')
 
@@ -1278,19 +1953,33 @@ def update_profile():
         return "Access Denied", 403
 
     db = get_db()
-    role = db.execute("SELECT role FROM users WHERE id = ?", (target_id,)).fetchone()['role']
+
+    # Визначаємо роль цільового користувача
+    if session.get('role') == 'ADMIN' and session.get('edit_target_id'):
+        # Перевіряємо чи це студент
+        std_row = db.execute("SELECT id FROM students WHERE id = ?", (target_id,)).fetchone()
+        if std_row:
+            target_role = 'STUDENT'
+        else:
+            usr_row = db.execute("SELECT role FROM users WHERE id = ?", (target_id,)).fetchone()
+            target_role = usr_row['role'] if usr_row else 'ADMIN'
+    elif session.get('role') == 'STUDENT':
+        target_role = 'STUDENT'
+    elif session.get('role') == 'ADMIN':
+        target_role = 'ADMIN'
+    else:
+        usr_row = db.execute("SELECT role FROM users WHERE id = ?", (target_id,)).fetchone()
+        target_role = usr_row['role'] if usr_row else 'EMPLOYEE'
     
-    db.execute("UPDATE users SET email = ? WHERE id = ?", (request.form.get('email'), target_id))
-    
-    if role == 'STUDENT':
-        # Якщо ми під адміном, отримуємо переданий рейтинг (якщо ні - лишаємо старий)
+    if target_role == 'STUDENT':
         rating_val = request.form.get('rating')
         if session.get('role') == 'ADMIN' and rating_val is not None:
             db.execute("UPDATE students SET rating=? WHERE id=?", (int(rating_val), target_id))
 
+        new_email = request.form.get('email')
         db.execute("""
-            UPDATE students SET first_name=?, last_name=?, patronymic=?, course=?, specialty=?, skills=?, links=?, contact_info=?, avatar=?
-            WHERE user_id=?
+            UPDATE students SET first_name=?, last_name=?, patronymic=?, course=?, specialty=?, skills=?, links=?, contact_info=?, avatar=?, email=?, username=?
+            WHERE id=?
         """, (
             request.form.get('first_name'),
             request.form.get('last_name'),
@@ -1301,9 +1990,14 @@ def update_profile():
             request.form.get('links'),
             request.form.get('contact_info'),
             request.form.get('avatar'),
+            new_email,
+            new_email,  # username = email
             target_id
         ))
-    elif role in ('COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'):
+    elif target_role in ('COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'):
+        new_email = request.form.get('email')
+        if new_email and session.get('role') == 'ADMIN':
+            db.execute("UPDATE users SET email=?, username=? WHERE id=?", (new_email, new_email, target_id))
         comp_id = db.execute('SELECT company_id FROM users WHERE id=?', (target_id,)).fetchone()['company_id']
         if comp_id:
             db.execute("""
@@ -1372,9 +2066,16 @@ def respond_invite():
 
 @app.route('/delete_invite', methods=['POST'])
 def delete_invite():
-    if session.get('role') != 'ADMIN': return redirect('/')
+    if session.get('role') not in ('ADMIN', 'COMPANY_ADMIN', 'EMPLOYEE'): return redirect('/')
     invite_id = request.form.get('invite_id')
     db = get_db()
+    # Перевірка прав: COMPANY_ADMIN/EMPLOYEE можуть видаляти лише свої запити
+    if session.get('role') != 'ADMIN':
+        comp_id = session.get('company_id')
+        inv = db.execute("SELECT company_id FROM invitations WHERE id=?", (invite_id,)).fetchone()
+        if not inv or inv['company_id'] != comp_id:
+            flash("Доступ заборонено.")
+            return redirect('/?tab=invitations')
     db.execute("DELETE FROM invitations WHERE id = ?", (invite_id,))
     db.commit()
     flash("Заявку успішно видалено.")
@@ -1393,34 +2094,35 @@ def flag_invite():
 @app.route('/admin/toggle_block', methods=['POST'])
 def admin_toggle_block():
     if session.get('role') != 'ADMIN': return redirect('/')
-    user_id = request.form.get('user_id')
+    user_id   = request.form.get('user_id')
+    user_type = request.form.get('user_type', 'employee')
     db = get_db()
-    db.execute("UPDATE users SET status = CASE WHEN status = 'blocked' THEN 'active' ELSE 'blocked' END WHERE id = ?", (user_id,))
+    if user_type == 'student':
+        db.execute("UPDATE students SET status = CASE WHEN status='blocked' THEN 'active' ELSE 'blocked' END WHERE id=?", (user_id,))
+        redirect_tab = 'users'
+    else:
+        db.execute("UPDATE users SET status = CASE WHEN status='blocked' THEN 'active' ELSE 'blocked' END WHERE id=?", (user_id,))
+        redirect_tab = 'companies'
     db.commit()
-    flash("Статус користувача змінено.")
-    return redirect('/?tab=users')
+    flash("Статус змінено.")
+    return redirect(f'/?tab={redirect_tab}')
 
 @app.route('/admin/delete_user', methods=['POST'])
 def admin_delete_user():
     if session.get('role') != 'ADMIN': return redirect('/')
-    user_id = request.form.get('user_id')
+    user_id   = request.form.get('user_id')
+    user_type = request.form.get('user_type', 'employee')
     db = get_db()
-    
-    db.execute("""
-        DELETE FROM invitations 
-        WHERE user_id = ? 
-           OR student_id IN (SELECT id FROM students WHERE user_id = ?) 
-           OR company_id IN (SELECT id FROM companies WHERE user_id = ?)
-    """, (user_id, user_id, user_id))
-    
-    db.execute("DELETE FROM students WHERE user_id = ?", (user_id,))
-    db.execute("DELETE FROM companies WHERE user_id = ?", (user_id,))
-    db.execute("DELETE FROM admins WHERE id = ?", (user_id,))
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    db.commit()
-    
-    flash("Користувача та всі його дані успішно видалено назавжди.")
-    return redirect('/?tab=users')
+    if user_type == 'student':
+        db.execute("DELETE FROM invitations WHERE student_id=?", (user_id,))
+        db.execute("DELETE FROM students WHERE id=?", (user_id,))
+        flash("Студента видалено.")
+        return redirect('/?tab=users')
+    else:
+        db.execute("DELETE FROM invitations WHERE user_id=?", (user_id,))
+        db.execute("DELETE FROM users WHERE id=?", (user_id,))
+        flash("Працівника видалено.")
+        return redirect('/?tab=companies')
 
 @app.route('/api/student/<int:user_id>')
 def get_student_api(user_id):
@@ -1430,6 +2132,162 @@ def get_student_api(user_id):
     if std:
         return dict(std)
     return {"error": "Student not found"}, 404
+
+
+
+@app.route('/admin/create_company', methods=['POST'])
+def admin_create_company():
+    if session.get('role') != 'ADMIN':
+        flash("Доступ заборонено.")
+        return redirect('/')
+    company_name = request.form.get('company_name')
+    email        = request.form.get('email')
+    username     = request.form.get('username') or email  # email = username
+    password     = request.form.get('password')
+    db = get_db()
+    try:
+        db.execute("INSERT INTO companies (company_name) VALUES (?)", (company_name,))
+        company_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute("INSERT INTO users (username, email, password, role, company_id, position, status) VALUES (?, ?, ?, 'COMPANY_ADMIN', ?, 'Директор', 'active')", (email, email, password, company_id))
+        new_user_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute("UPDATE companies SET user_id=? WHERE id=?", (new_user_id, company_id))
+        db.commit()
+        flash(f"Компанію '{company_name}' створено! Логін директора: {email}")
+    except Exception as e:
+        flash(f"Помилка: {e}")
+    return redirect('/?tab=users')
+
+@app.route('/admin/add_employee', methods=['POST'])
+def admin_add_employee():
+    if session.get('role') != 'ADMIN':
+        flash("Доступ заборонено.")
+        return redirect('/')
+    email      = request.form.get('email', '').strip()
+    position   = request.form.get('position', '').strip()
+    password   = request.form.get('password', '').strip()
+    company_id = request.form.get('company_id')
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO users (username, email, password, role, company_id, position, status) VALUES (?, ?, ?, 'EMPLOYEE', ?, ?, 'active')",
+            (email, email, password, company_id, position)
+        )
+        db.commit()
+        flash(f"Працівника '{email}' додано до компанії!")
+    except Exception as e:
+        flash(f"Помилка: {e}")
+    return redirect('/?tab=companies')
+
+@app.route('/company/add_employee', methods=['POST'])
+def company_add_employee():
+    if session.get('role') != 'COMPANY_ADMIN':
+        flash("Доступ заборонено.")
+        return redirect('/')
+    email      = request.form.get('email', '').strip()
+    position   = request.form.get('position', '').strip()
+    password   = request.form.get('password', '').strip()
+    company_id = session.get('company_id')
+    if not company_id:
+        flash("Не вдалося визначити вашу компанію.")
+        return redirect('/')
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO users (username, email, password, role, company_id, position, status) VALUES (?, ?, ?, 'EMPLOYEE', ?, ?, 'active')",
+            (email, email, password, company_id, position)
+        )
+        db.commit()
+        flash(f"Робітника '{email}' успішно додано до вашої компанії!")
+    except Exception as e:
+        flash(f"Помилка: {e}")
+    return redirect('/?tab=invitations')
+
+@app.route('/admin/support_archive', methods=['POST'])
+def admin_support_archive():
+    if session.get('role') != 'ADMIN': return redirect('/')
+    conv_key = request.form.get('conv_key')
+    action   = request.form.get('action', 'archive')
+    db = get_db()
+    if action == 'archive':
+        db.execute("UPDATE support_messages SET is_archived=1 WHERE session_key=?", (conv_key,))
+        flash("Діалог переміщено в архів.")
+    elif action == 'unarchive':
+        db.execute("UPDATE support_messages SET is_archived=0 WHERE session_key=?", (conv_key,))
+        flash("Діалог відновлено.")
+    elif action == 'delete':
+        db.execute("DELETE FROM support_messages WHERE session_key=?", (conv_key,))
+        flash("Діалог видалено назавжди.")
+    db.commit()
+    show_archived = '&show_archived=1' if action == 'unarchive' else ''
+    return redirect(f'/?tab=support{show_archived}')
+
+@app.route('/admin/support_reply', methods=['POST'])
+def admin_support_reply():
+    if session.get('role') != 'ADMIN': return redirect('/')
+    conv_key = request.form.get('conv_key')
+    reply = request.form.get('reply')
+    last_msg_id = request.form.get('last_msg_id')
+    db = get_db()
+    # Mark messages in this conversation as read
+    db.execute("UPDATE support_messages SET is_read=1 WHERE session_key=?", (conv_key,))
+    # Insert admin reply as a new message with sender_type='admin'
+    db.execute("""
+        INSERT INTO support_messages (sender_type, sender_id, sender_name, message, session_key, is_read)
+        VALUES ('admin', ?, 'Адміністратор', ?, ?, 1)
+    """, (session['user_id'], reply, conv_key))
+    db.commit()
+    flash("Відповідь надіслано!")
+    return redirect(f'/?tab=support&conv_key={conv_key}')
+
+@app.route('/support/send', methods=['POST'])
+def support_send():
+    """API endpoint for sending support messages (guests and logged-in users)"""
+    from flask import jsonify
+    import uuid
+    db = get_db()
+    message = request.form.get('message', '').strip()
+    if not message:
+        return jsonify({'ok': False})
+    
+    if 'user_id' in session:
+        sender_type = session.get('role', 'user').lower()
+        sender_id = session['user_id']
+        sender_name = session.get('username', 'User')
+        # Use user-specific session key
+        conv_key = f"user_{session['user_id']}"
+    else:
+        sender_type = 'guest'
+        sender_id = None
+        sender_name = request.form.get('sender_name', 'Гість')
+        # Use or create a guest session key
+        if 'support_key' not in session:
+            session['support_key'] = str(uuid.uuid4())[:8]
+        conv_key = f"guest_{session['support_key']}"
+    
+    db.execute("""
+        INSERT INTO support_messages (sender_type, sender_id, sender_name, message, session_key, is_read)
+        VALUES (?, ?, ?, ?, ?, 0)
+    """, (sender_type, sender_id, sender_name, message, conv_key))
+    db.commit()
+    return jsonify({'ok': True, 'message': message, 'sender': sender_name})
+
+@app.route('/support/history')
+def support_history():
+    """Get chat history for current user/guest"""
+    from flask import jsonify
+    db = get_db()
+    if 'user_id' in session:
+        conv_key = f"user_{session['user_id']}"
+    elif 'support_key' in session:
+        conv_key = f"guest_{session['support_key']}"
+    else:
+        return jsonify([])
+    
+    msgs = db.execute("""
+        SELECT id, sender_type, sender_name, message, created_at 
+        FROM support_messages WHERE session_key=? ORDER BY created_at ASC
+    """, (conv_key,)).fetchall()
+    return jsonify([dict(m) for m in msgs])
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE):
