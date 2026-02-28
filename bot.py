@@ -12,7 +12,7 @@ import requests as req_lib
 # ── Конфігурація ───────────────────────────────────────────────────────────────
 TG_TOKEN  = '8508685213:AAGWKzmjGfcBbW0yS1DbcpfMI4g4NoIvPcE'
 TG_GROUP  = -5284724066
-TG_ADMINS = {785579199, 713037789}
+TG_ADMINS = {785579199, 713037789, 995606988}
 TG_API    = f'https://api.telegram.org/bot{TG_TOKEN}'
 
 # Зв'язок: tg_message_id → conv_key
