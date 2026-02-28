@@ -253,32 +253,6 @@ HTML_TEMPLATE = """
                         <i class="fas fa-headset text-2xl"></i> Чат Підтримки
                     </button>
                 </div>
-
-                <!-- Чат підтримки для залогінених -->
-                <div id="user-support-chat" class="hidden fixed bottom-6 right-6 z-[200] w-96 bg-white rounded-3xl shadow-2xl flex flex-col border border-gray-200" style="max-height:520px;">
-                    <div class="flex items-center justify-between p-4 bg-[#AC0632] rounded-t-3xl">
-                        <div class="flex items-center gap-3">
-                            <div class="bg-white p-2 rounded-full"><i class="fas fa-headset text-[#AC0632]"></i></div>
-                            <div>
-                                <div class="text-white font-black uppercase">Підтримка</div>
-                                <div class="text-red-200 text-xs">Адмін відповість незабаром</div>
-                            </div>
-                        </div>
-                        <button onclick="toggleUserChat()" class="text-white text-2xl hover:text-red-200">&times;</button>
-                    </div>
-                    <div id="user-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50" style="min-height:200px;max-height:320px;">
-                        <div class="flex gap-2 items-start">
-                            <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-robot text-xs"></i></div>
-                            <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">Вітаємо, {{ session.get('username') }}! Чим можемо допомогти?</div>
-                        </div>
-                    </div>
-                    <div class="p-3 border-t border-gray-100 bg-white rounded-b-3xl">
-                        <div class="flex gap-2">
-                            <input type="text" id="user-chat-input" placeholder="Напишіть повідомлення..." class="flex-1 p-2.5 rounded-xl bg-gray-100 border text-sm focus:border-[#AC0632] outline-none" onkeydown="if(event.key==='Enter') sendUserMessage()">
-                            <button onclick="sendUserMessage()" class="bg-[#AC0632] text-white px-3 py-2 rounded-xl hover:bg-red-800 transition"><i class="fas fa-paper-plane"></i></button>
-                        </div>
-                    </div>
-                </div>
             </section>
             {% endif %}
 
@@ -824,6 +798,63 @@ HTML_TEMPLATE = """
 
         </div>
         {% endif %}
+
+    <!-- ════ ГЛОБАЛЬНИЙ ЧАТ ПІДТРИМКИ (доступний на ВСІХ вкладках) ════ -->
+    {% if session.get('user_id') and session.get('role') != 'ADMIN' %}
+
+    <!-- Плаваюча кнопка -->
+    <button onclick="toggleUserChat()" id="support-float-btn"
+        class="fixed bottom-6 right-6 z-[199] bg-[#AC0632] hover:bg-red-800 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all transform hover:scale-110 border-2 border-white/30"
+        title="Підтримка">
+        <i class="fas fa-headset text-xl"></i>
+        <span id="support-float-badge"
+            class="hidden absolute -top-1 -right-1 bg-yellow-400 text-black text-[10px] w-5 h-5 rounded-full font-black items-center justify-center">!</span>
+    </button>
+
+    <!-- Вікно чату — особистий чат кожного юзера окремо -->
+    <div id="user-support-chat"
+        class="hidden fixed bottom-24 right-6 z-[200] w-96 bg-white rounded-3xl shadow-2xl flex flex-col border border-gray-200"
+        style="max-height:520px;">
+        <!-- Заголовок -->
+        <div class="flex items-center justify-between p-4 bg-[#AC0632] rounded-t-3xl">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-full"><i class="fas fa-headset text-[#AC0632]"></i></div>
+                <div>
+                    <div class="text-white font-black uppercase">Підтримка УКД</div>
+                    <div class="text-red-200 text-xs">{{ session.get('username') }} · особистий чат</div>
+                </div>
+            </div>
+            <button onclick="toggleUserChat()" class="text-white text-2xl hover:text-red-200 leading-none">&times;</button>
+        </div>
+        <!-- Повідомлення -->
+        <div id="user-chat-messages"
+            class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50"
+            style="min-height:200px; max-height:320px;">
+            <div class="flex gap-2 items-start">
+                <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                    <i class="fas fa-robot text-xs"></i>
+                </div>
+                <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">
+                    Вітаємо, <b>{{ session.get('username') }}</b>! Це ваш особистий чат з підтримкою.
+                </div>
+            </div>
+        </div>
+        <!-- Поле вводу -->
+        <div class="p-3 border-t border-gray-100 bg-white rounded-b-3xl">
+            <div class="flex gap-2">
+                <input type="text" id="user-chat-input"
+                    placeholder="Напишіть повідомлення..."
+                    class="flex-1 p-2.5 rounded-xl bg-gray-100 border text-sm focus:border-[#AC0632] outline-none"
+                    onkeydown="if(event.key==='Enter') sendUserMessage()">
+                <button onclick="sendUserMessage()"
+                    class="bg-[#AC0632] text-white px-3 py-2 rounded-xl hover:bg-red-800 transition">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     </main>
 
     <!-- ═══════════════════════ МОДАЛЬНІ ВІКНА ═══════════════════════ -->
@@ -1061,18 +1092,26 @@ HTML_TEMPLATE = """
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // Logged-in user support chat
-        function toggleUserChat() {
-            const chat = document.getElementById('user-support-chat');
-            if (chat) {
-                chat.classList.toggle('hidden');
-                if (!chat.classList.contains('hidden')) loadUserChatHistory();
-            }
-        }
-
+        // ══ ОСОБИСТИЙ ЧАТ ПІДТРИМКИ (унікальний для кожного user_id) ══════════
         let _lastMsgId = 0;
         let _pollingInterval = null;
 
+        // Відкрити/закрити чат
+        function toggleUserChat() {
+            const chat  = document.getElementById('user-support-chat');
+            const badge = document.getElementById('support-float-badge');
+            if (!chat) return;
+            const isOpen = !chat.classList.contains('hidden');
+            if (isOpen) {
+                chat.classList.add('hidden');
+            } else {
+                chat.classList.remove('hidden');
+                if (badge) badge.classList.add('hidden'); // прибираємо бейдж
+                loadUserChatHistory(); // завантажуємо СВОЮ історію
+            }
+        }
+
+        // Рендер одного повідомлення
         function renderMsg(m) {
             const isAdmin = m.sender_type === 'admin';
             return `<div class="flex gap-2 items-start ${isAdmin ? '' : 'flex-row-reverse'}">
@@ -1083,59 +1122,102 @@ HTML_TEMPLATE = """
             </div>`;
         }
 
+        // Завантажити повну історію чату ЦЬОГО юзера
         function loadUserChatHistory() {
             fetch('/support/history')
                 .then(r => r.json())
                 .then(msgs => {
                     const div = document.getElementById('user-chat-messages');
                     if (!div) return;
-                    div.innerHTML = '';
-                    msgs.forEach(m => {
-                        div.innerHTML += renderMsg(m);
-                        if (m.id > _lastMsgId) _lastMsgId = m.id;
-                    });
-                    div.scrollTop = div.scrollHeight;
-                    if (!_pollingInterval) _pollingInterval = setInterval(checkNewAdminMessages, 4000);
+                    if (msgs.length > 0) {
+                        div.innerHTML = ''; // прибираємо привітальне
+                        msgs.forEach(m => {
+                            div.innerHTML += renderMsg(m);
+                            if (m.id > _lastMsgId) _lastMsgId = m.id;
+                        });
+                        div.scrollTop = div.scrollHeight;
+                    }
+                    // Запускаємо polling якщо ще не запущений
+                    if (!_pollingInterval) {
+                        _pollingInterval = setInterval(checkNewAdminMessages, 3000);
+                    }
                 });
         }
 
+        // Перевірити нові відповіді адміна (тільки для ЦЬОГО юзера)
         function checkNewAdminMessages() {
-            const div = document.getElementById('user-chat-messages');
-            if (!div) return;
             fetch('/support/check_new?last_id=' + _lastMsgId)
                 .then(r => r.json())
                 .then(msgs => {
+                    if (!msgs.length) return;
+                    const div   = document.getElementById('user-chat-messages');
+                    const chat  = document.getElementById('user-support-chat');
+                    const badge = document.getElementById('support-float-badge');
                     msgs.forEach(m => {
-                        div.innerHTML += renderMsg(m);
                         if (m.id > _lastMsgId) _lastMsgId = m.id;
-                        div.scrollTop = div.scrollHeight;
+                        // Якщо чат відкритий — показуємо одразу
+                        if (chat && !chat.classList.contains('hidden') && div) {
+                            div.innerHTML += renderMsg(m);
+                            div.scrollTop = div.scrollHeight;
+                        } else {
+                            // Чат закритий — показуємо бейдж на кнопці
+                            if (badge) {
+                                badge.classList.remove('hidden');
+                                badge.style.display = 'flex';
+                            }
+                        }
                     });
                 });
         }
 
+        // Надіслати повідомлення
         function sendUserMessage() {
             const input = document.getElementById('user-chat-input');
-            const msg = input.value.trim();
+            const msg   = input.value.trim();
             if (!msg) return;
             const div = document.getElementById('user-chat-messages');
+
+            // Одразу показуємо своє повідомлення
             div.innerHTML += `<div class="flex gap-2 items-start flex-row-reverse">
-                <div class="bg-gray-300 p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-user text-xs text-gray-600"></i></div>
+                <div class="bg-gray-300 p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                    <i class="fas fa-user text-xs text-gray-600"></i>
+                </div>
                 <div class="bg-white rounded-2xl rounded-tr-none p-3 shadow-sm text-sm max-w-[75%]">${msg}</div>
             </div>`;
+            div.scrollTop = div.scrollHeight;
+            input.value = '';
+
             fetch('/support/send', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: `message=${encodeURIComponent(msg)}`
-            }).then(() => {
-                div.innerHTML += `<div class="flex gap-2 items-start">
-                    <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0"><i class="fas fa-robot text-xs"></i></div>
-                    <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">Повідомлення отримано! Адміністратор відповість незабаром.</div>
-                </div>`;
-                div.scrollTop = div.scrollHeight;
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    div.innerHTML += `<div class="flex gap-2 items-start">
+                        <div class="bg-[#AC0632] text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                            <i class="fas fa-robot text-xs"></i>
+                        </div>
+                        <div class="bg-white rounded-2xl rounded-tl-none p-3 shadow-sm text-sm">
+                            ✅ Повідомлення надіслано! Адміністратор відповість незабаром.
+                        </div>
+                    </div>`;
+                    div.scrollTop = div.scrollHeight;
+                    // Запускаємо polling якщо ще не запущений
+                    if (!_pollingInterval) {
+                        _pollingInterval = setInterval(checkNewAdminMessages, 3000);
+                    }
+                }
             });
-            input.value = '';
-            div.scrollTop = div.scrollHeight;
         }
+
+        // Запускаємо polling одразу при завантаженні сторінки
+        // (щоб бейдж з'явився навіть якщо чат ще не відкривали)
+        document.addEventListener('DOMContentLoaded', function() {
+            const btn = document.getElementById('support-float-btn');
+            if (btn) {
+                _pollingInterval = setInterval(checkNewAdminMessages, 5000);
+            }
+        });
 
         function openInviteModal(id, name) {
             document.getElementById('invite-student-id').value = id;

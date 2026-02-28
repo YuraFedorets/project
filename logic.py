@@ -593,11 +593,13 @@ def register_routes(app, HTML_TEMPLATE):
             sender_type = session.get('role', 'user').lower()
             sender_id   = session['user_id']
             sender_name = session.get('username', 'User')
+            # conv_key унікальний для КОЖНОГО залогіненого юзера
             conv_key    = f"user_{session['user_id']}"
         else:
             sender_type = 'guest'
             sender_id   = None
             sender_name = request.form.get('sender_name', 'Гість')
+            # Гостям — унікальний ключ сесії
             if 'support_key' not in session:
                 session['support_key'] = str(uuid.uuid4())[:8]
             conv_key = f"guest_{session['support_key']}"
@@ -615,6 +617,7 @@ def register_routes(app, HTML_TEMPLATE):
 
     @app.route('/support/history')
     def support_history():
+        """Повертає ВСЮ історію чату ТІЛЬКИ поточного юзера."""
         db = get_db()
         if 'user_id' in session:
             conv_key = f"user_{session['user_id']}"
@@ -630,6 +633,10 @@ def register_routes(app, HTML_TEMPLATE):
 
     @app.route('/support/check_new')
     def support_check_new():
+        """
+        Повертає НОВІ повідомлення від адміна для ПОТОЧНОГО юзера.
+        Після повернення позначає їх як прочитані (is_read=1).
+        """
         db = get_db()
         last_id = request.args.get('last_id', 0, type=int)
         if 'user_id' in session:
@@ -638,13 +645,25 @@ def register_routes(app, HTML_TEMPLATE):
             conv_key = f"guest_{session['support_key']}"
         else:
             return jsonify([])
+
+        # Вибираємо непрочитані відповіді адміна після last_id
         msgs = db.execute("""
             SELECT id, sender_type, sender_name, message, created_at
             FROM support_messages
-            WHERE session_key=? AND id>? AND sender_type='admin'
+            WHERE session_key=? AND id>? AND sender_type='admin' AND is_read=0
             ORDER BY created_at ASC
         """, (conv_key, last_id)).fetchall()
-        return jsonify([dict(m) for m in msgs])
+
+        result = [dict(m) for m in msgs]
+
+        # Позначаємо як прочитані щоб не дублювати
+        if result:
+            ids = tuple(m['id'] for m in result)
+            placeholders = ','.join('?' * len(ids))
+            db.execute(f"UPDATE support_messages SET is_read=1 WHERE id IN ({placeholders})", ids)
+            db.commit()
+
+        return jsonify(result)
 
     # ══════════════════════════════════════════════════════════════════════
     # API
