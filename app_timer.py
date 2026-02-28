@@ -1,7 +1,88 @@
 import sqlite3
 import os
-from flask import Flask, render_template_string, request, session, redirect, g, flash
+import threading
+import requests as req_lib
+from flask import Flask, render_template_string, request, session, redirect, g, flash, jsonify
 from datetime import datetime
+
+# ── Telegram config ────────────────────────────────────────────────────────────
+TG_TOKEN   = '8508685213:AAGWKzmjGfcBbW0yS1DbcpfMI4g4NoIvPcE'
+TG_ADMIN   = 785579199          # твій chat_id
+TG_API     = f'https://api.telegram.org/bot{TG_TOKEN}'
+# Зберігаємо зв'язок: tg_message_id → conv_key  (щоб знати куди відповісти)
+TG_MSG_MAP = {}                 # { reply_to_message_id: conv_key }
+
+def tg_send(chat_id, text, reply_to=None):
+    """Надіслати повідомлення через Telegram."""
+    try:
+        payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}
+        if reply_to:
+            payload['reply_to_message_id'] = reply_to
+        r = req_lib.post(f'{TG_API}/sendMessage', json=payload, timeout=5)
+        return r.json()
+    except Exception as e:
+        print(f'[TG] send error: {e}')
+        return {}
+
+def tg_notify_admin(sender_name, conv_key, message):
+    """Повідомити адміна про нове повідомлення в чаті підтримки."""
+    text = (
+        f'💬 <b>Нове повідомлення в підтримці</b>\n'
+        f'👤 <b>Від:</b> {sender_name}\n'
+        f'🔑 <b>Ключ:</b> <code>{conv_key}</code>\n'
+        f'📝 <b>Текст:</b> {message}\n\n'
+        f'<i>Щоб відповісти — просто відповідай на це повідомлення в Telegram</i>'
+    )
+    result = tg_send(TG_ADMIN, text)
+    # Запам'ятовуємо прив'язку message_id → conv_key
+    msg_id = result.get('result', {}).get('message_id')
+    if msg_id:
+        TG_MSG_MAP[msg_id] = conv_key
+    return msg_id
+
+def tg_polling():
+    """Фоновий polling — слухає відповіді адміна і зберігає їх у БД."""
+    import time
+    offset = 0
+    print('[TG] Polling started')
+    while True:
+        try:
+            r = req_lib.get(f'{TG_API}/getUpdates',
+                            params={'timeout': 30, 'offset': offset}, timeout=35)
+            updates = r.json().get('result', [])
+            for upd in updates:
+                offset = upd['update_id'] + 1
+                msg = upd.get('message', {})
+                # Адмін відповів на повідомлення бота
+                reply_to = msg.get('reply_to_message', {}).get('message_id')
+                text = msg.get('text', '').strip()
+                from_id = msg.get('from', {}).get('id')
+                if from_id == TG_ADMIN and reply_to and text and reply_to in TG_MSG_MAP:
+                    conv_key = TG_MSG_MAP[reply_to]
+                    # Зберігаємо відповідь у БД
+                    try:
+                        import sqlite3 as _sq
+                        db2 = _sq.connect('ukd_database.db')
+                        db2.row_factory = _sq.Row
+                        db2.execute("""
+                            INSERT INTO support_messages
+                                (sender_type, sender_id, sender_name, message, session_key, is_read)
+                            VALUES ('admin', 0, 'Адміністратор', ?, ?, 1)
+                        """, (text, conv_key))
+                        db2.commit()
+                        db2.close()
+                        tg_send(TG_ADMIN, f'✅ Відповідь надіслано в чат <code>{conv_key}</code>', reply_to=msg['message_id'])
+                        print(f'[TG] Reply saved to conv {conv_key}')
+                    except Exception as e:
+                        print(f'[TG] DB error: {e}')
+                        tg_send(TG_ADMIN, f'❌ Помилка збереження: {e}')
+        except Exception as e:
+            print(f'[TG] polling error: {e}')
+            time.sleep(5)
+
+# Запускаємо polling у фоновому потоці
+_tg_thread = threading.Thread(target=tg_polling, daemon=True)
+_tg_thread.start()
 
 # Налаштування додатка
 app = Flask(__name__)
@@ -1497,26 +1578,53 @@ HTML_TEMPLATE = """
             }
         }
 
+        // Авто-polling: перевіряємо нові відповіді адміна кожні 4 сек
+        let _lastMsgId = 0;
+        let _pollingInterval = null;
+
+        function renderMsg(m) {
+            const isAdmin = m.sender_type === 'admin';
+            return `<div class="flex gap-2 items-start ${isAdmin ? '' : 'flex-row-reverse'}">
+                <div class="${isAdmin ? 'bg-[#AC0632]' : 'bg-gray-300'} text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                    <i class="fas ${isAdmin ? 'fa-user-shield' : 'fa-user'} text-xs"></i>
+                </div>
+                <div class="${isAdmin ? 'bg-[#AC0632] text-white rounded-tl-none' : 'bg-white rounded-tr-none'} rounded-2xl p-3 shadow-sm text-sm max-w-[75%]">${m.message}</div>
+            </div>`;
+        }
+
         function loadUserChatHistory() {
             fetch('/support/history')
                 .then(r => r.json())
                 .then(msgs => {
                     const div = document.getElementById('user-chat-messages');
                     if (!div) return;
-                    let extra = '';
+                    div.innerHTML = '';
                     msgs.forEach(m => {
-                        const isAdmin = m.sender_type === 'admin';
-                        extra += `<div class="flex gap-2 items-start ${isAdmin ? 'flex-row-reverse' : ''}">
-                            <div class="${isAdmin ? 'bg-[#AC0632]' : 'bg-gray-300'} text-white p-1.5 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
-                                <i class="fas ${isAdmin ? 'fa-user-shield' : 'fa-user'} text-xs"></i>
-                            </div>
-                            <div class="${isAdmin ? 'bg-[#AC0632] text-white rounded-tr-none' : 'bg-white rounded-tl-none'} rounded-2xl p-3 shadow-sm text-sm max-w-[75%]">${m.message}</div>
-                        </div>`;
+                        div.innerHTML += renderMsg(m);
+                        if (m.id > _lastMsgId) _lastMsgId = m.id;
                     });
-                    if (extra) {
-                        div.innerHTML = div.innerHTML + extra;
-                        div.scrollTop = div.scrollHeight;
+                    div.scrollTop = div.scrollHeight;
+                    // Запускаємо polling після завантаження історії
+                    if (!_pollingInterval) {
+                        _pollingInterval = setInterval(checkNewAdminMessages, 4000);
                     }
+                });
+        }
+
+        function checkNewAdminMessages() {
+            const div = document.getElementById('user-chat-messages');
+            if (!div) return;
+            fetch('/support/check_new?last_id=' + _lastMsgId)
+                .then(r => r.json())
+                .then(msgs => {
+                    msgs.forEach(m => {
+                        div.innerHTML += renderMsg(m);
+                        if (m.id > _lastMsgId) _lastMsgId = m.id;
+                        // Звуковий/візуальний сигнал
+                        div.scrollTop = div.scrollHeight;
+                        const badge = document.getElementById('support-new-badge');
+                        if (badge) badge.classList.remove('hidden');
+                    });
                 });
         }
 
@@ -2236,6 +2344,12 @@ def admin_support_reply():
         VALUES ('admin', ?, 'Адміністратор', ?, ?, 1)
     """, (session['user_id'], reply, conv_key))
     db.commit()
+
+    # ── Повідомити адміна в Telegram про відповідь з сайту ────────────────────
+    def _notify_reply():
+        tg_send(TG_ADMIN, f'✅ Відповідь надіслана через сайт у чат <code>{conv_key}</code>:\n{reply}')
+    threading.Thread(target=_notify_reply, daemon=True).start()
+
     flash("Відповідь надіслано!")
     return redirect(f'/?tab=support&conv_key={conv_key}')
 
@@ -2269,6 +2383,12 @@ def support_send():
         VALUES (?, ?, ?, ?, ?, 0)
     """, (sender_type, sender_id, sender_name, message, conv_key))
     db.commit()
+
+    # ── Telegram notification ──────────────────────────────────────────────────
+    def _notify():
+        tg_notify_admin(sender_name, conv_key, message)
+    threading.Thread(target=_notify, daemon=True).start()
+
     return jsonify({'ok': True, 'message': message, 'sender': sender_name})
 
 @app.route('/support/history')
@@ -2287,6 +2407,27 @@ def support_history():
         SELECT id, sender_type, sender_name, message, created_at 
         FROM support_messages WHERE session_key=? ORDER BY created_at ASC
     """, (conv_key,)).fetchall()
+    return jsonify([dict(m) for m in msgs])
+
+
+@app.route('/support/check_new')
+def support_check_new():
+    """Клієнт питає чи є нові повідомлення від адміна."""
+    from flask import jsonify
+    db = get_db()
+    last_id = request.args.get('last_id', 0, type=int)
+    if 'user_id' in session:
+        conv_key = f"user_{session['user_id']}"
+    elif 'support_key' in session:
+        conv_key = f"guest_{session['support_key']}"
+    else:
+        return jsonify([])
+    msgs = db.execute("""
+        SELECT id, sender_type, sender_name, message, created_at
+        FROM support_messages
+        WHERE session_key=? AND id>? AND sender_type='admin'
+        ORDER BY created_at ASC
+    """, (conv_key, last_id)).fetchall()
     return jsonify([dict(m) for m in msgs])
 
 if __name__ == '__main__':
