@@ -1,0 +1,68 @@
+/* ══════════════════════════════════════════════════════
+   style.css — УКД Talent: головні стилі
+   ══════════════════════════════════════════════════════ */
+
+:root {
+    --ukd-red:    #4a0404;
+    --ukd-bright: #8b0000;
+    --ukd-main:   #AC0632;
+}
+
+/* ── Фон сторінки ── */
+body {
+    background-image:
+        linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)),
+        url('https://ukd.edu.ua/sites/default/files/styles/16/public/2024-10/DSC_3783.jpg?h=295b0d92&itok=mx-I0n3V');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+}
+
+/* ── Картки ── */
+.card { background: white; color: black; border-left: 8px solid black; transition: 0.3s; }
+.card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+
+/* ── Навігаційні кнопки ── */
+.nav-btn {
+    position: relative;
+    color: rgba(255,255,255,0.7) !important;
+    transition: all 0.3s cubic-bezier(0.4,0,0.2,1) !important;
+    padding: 8px 16px !important;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.nav-btn:hover {
+    color: #fff !important;
+    background: rgba(255,255,255,0.1);
+    transform: translateY(-2px);
+}
+.nav-btn::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 50%;
+    width: 0; height: 2px;
+    background: #ff4d4d;
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+}
+.nav-btn:hover::after { width: 70%; }
+.nav-btn.active { color: #fff !important; background: rgba(255,77,77,0.15); font-weight: 700 !important; }
+.nav-btn.active::after { width: 80%; background: #ff4d4d; }
+
+/* ── Форми ── */
+input, select, textarea { border: 2px solid #ddd; transition: 0.3s; color: black; }
+input:focus, select:focus, textarea:focus { border-color: var(--ukd-bright); outline: none; }
+
+/* ── Модальні вікна ── */
+.modal-bg { background: rgba(0,0,0,0.9); }
+
+/* ── Таблиці ── */
+.table-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── Лейбли ── */
+.label-text {
+    display: block; font-weight: bold;
+    font-size: 0.75rem; text-transform: uppercase;
+    color: #6b7280; margin-bottom: 0.25rem;
+}
