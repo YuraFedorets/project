@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>УКД Recruitment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- ═══════════════════════ НАВІГАЦІЯ ═══════════════════════ -->
+    <nav class="p-4 sticky top-0 z-50 shadow-2xl" style="background-color: #a91825 !important; border-bottom: 2px solid rgba(255,255,255,0.1);">
+        <div class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3 cursor-pointer shrink-0" onclick="window.location.href='/'">
+                <div class="bg-white p-2 rounded-lg flex items-center justify-center" style="width:38px;height:38px;">
+                    <i class="fas fa-graduation-cap" style="color:#AC0632;"></i>
+                </div>
+                <span class="text-xl font-black uppercase tracking-tighter text-white">УКД TALENT</span>
+            </div>
+
+            <div class="flex items-center ml-auto">
+                {% if session.get('user_id') %}
+                <div class="flex items-center space-x-1">
+
+                    <a href="/?tab=home" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'home' else '' }}">
+                        <i class="fas fa-home mr-2"></i> Головна
+                    </a>
+                    <a href="/?tab=ranking" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'ranking' else '' }}">
+                        <i class="fas fa-list-ol mr-2"></i> Рейтинг
+                    </a>
+
+                    {% if session.get('role') == 'ADMIN' %}
+                    <div class="relative group mx-2">
+                        <button class="px-4 py-2 bg-black/40 text-white font-bold rounded-xl transition-all hover:bg-black/60 flex items-center border border-white/10">
+                            <i class="fas fa-user-shield mr-2"></i>
+                            <span>Адміністрування</span>
+                            <i class="fas fa-chevron-down ml-2 text-xs transition group-hover:rotate-180"></i>
+                        </button>
+                        <div class="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] transform origin-top scale-95 group-hover:scale-100">
+                            <p class="px-4 py-1 text-[10px] font-black text-gray-400 uppercase tracking-widest">Керування</p>
+                            <a href="/?tab=invitations" class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition"><i class="fas fa-shield-alt w-5"></i> Адмін Панель</a>
+                            <a href="/?tab=users"       class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition"><i class="fas fa-user-graduate w-5"></i> Студенти</a>
+                            <a href="/?tab=companies"   class="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition"><i class="fas fa-building w-5"></i> Компанії</a>
+                            <a href="/?tab=support" class="flex items-center justify-between px-4 py-3 text-gray-700 hover:bg-red-50 hover:text-[#AC0632] transition">
+                                <div class="flex items-center gap-3"><i class="fas fa-headset w-5"></i> Підтримка</div>
+                                {% if unread_support_count and unread_support_count > 0 %}
+                                <span class="bg-[#AC0632] text-white text-[10px] px-2 py-0.5 rounded-full font-black">{{ unread_support_count }}</span>
+                                {% endif %}
+                            </a>
+                            <div class="border-t-2 border-[#AC0632]/20 my-2 mx-2"></div>
+                            <button onclick="toggleModal('create-company-modal')" class="w-full text-left flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 transition"><i class="fas fa-plus-circle w-5 text-green-600"></i> Нова компанія</button>
+                            <button onclick="toggleModal('add-employee-modal')"   class="w-full text-left flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-red-50 transition"><i class="fas fa-user-plus w-5 text-blue-600"></i> Додати робітника</button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if session.get('role') == 'STUDENT' %}
+                    <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
+                        <i class="fas fa-inbox mr-2"></i> Мої Запрошення
+                    </a>
+                    {% elif session.get('role') in ['COMPANY', 'COMPANY_ADMIN', 'EMPLOYEE'] %}
+                    <a href="/?tab=invitations" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'invitations' else '' }}">
+                        <i class="fas fa-paper-plane mr-2"></i> Запити
+                    </a>
+                    {% if session.get('role') == 'COMPANY_ADMIN' %}
+                    <button onclick="toggleModal('company-add-employee-modal')" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center">
+                        <i class="fas fa-user-plus mr-2"></i> Додати
+                    </button>
+                    {% endif %}
+                    {% endif %}
+
+                    <a href="/?tab=profile" class="px-3 py-2 text-white font-bold rounded-xl transition-all hover:bg-white/20 flex items-center {{ 'bg-white/20' if active_tab == 'profile' else '' }}">
+                        <i class="fas fa-user-circle mr-2"></i> Профіль
+                    </a>
+
+                    <div class="flex items-center space-x-3 ml-4 pl-4 border-l border-white/20">
+                        <div class="text-right hidden sm:block">
+                            <div class="text-[10px] text-white/70 uppercase font-black leading-tight">{{ session.get('role') }}</div>
+                            <div class="text-sm text-white font-bold leading-none">{{ session.get('username') }}</div>
+                        </div>
+                        <a href="/logout" class="bg-white/10 hover:bg-red-600 p-2 rounded-full text-white transition flex items-center justify-center w-9 h-9">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </a>
+                    </div>
+                </div>
+                {% else %}
+                <div class="flex items-center">
+                    <button onclick="toggleModal('login-modal')" class="bg-white text-[#AC0632] px-6 py-2 rounded-xl font-bold hover:bg-gray-100 transition-all shadow-lg uppercase text-xs tracking-widest flex items-center gap-2">
+                        <i class="fas fa-sign-in-alt"></i> Вхід
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Мобільне меню -->
+    {% if session.get('user_id') %}
+    <div class="md:hidden flex justify-around mt-4 border-t border-white/10 pt-2 overflow-x-auto gap-4">
+        <a href="/?tab=home"        class="text-sm whitespace-nowrap text-white"><i class="fas fa-home"></i> Головна</a>
+        <a href="/?tab=ranking"     class="text-sm whitespace-nowrap text-white"><i class="fas fa-list"></i> Рейтинг</a>
+        <a href="/?tab=invitations" class="text-sm whitespace-nowrap text-white"><i class="fas fa-inbox"></i> Inbox</a>
+        {% if session.get('role') == 'ADMIN' %}
+        <a href="/?tab=users"     class="text-sm text-purple-400 whitespace-nowrap"><i class="fas fa-user-graduate"></i> Студенти</a>
+        <a href="/?tab=companies" class="text-sm text-blue-400 whitespace-nowrap"><i class="fas fa-building"></i> Компанії</a>
+        {% endif %}
+        <a href="/?tab=profile" class="text-sm whitespace-nowrap text-white"><i class="fas fa-user"></i> Профіль</a>
+    </div>
+    {% endif %}
+
+    <main class="flex-grow relative">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="container mx-auto px-4 mt-6">
+                <div class="bg-green-600 text-white p-4 rounded-xl text-center font-bold shadow-lg animate-bounce">
+                    {{ messages[0] }}
+                </div>
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+
+    </main>
+
+    <!-- ═══════════════════════ МОДАЛЬНІ ВІКНА ═══════════════════════ -->
+
+    <!-- Вхід -->
+    <div id="login-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-sm relative shadow-2xl">
+            <button onclick="toggleModal('login-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
+            <h2 class="text-3xl font-black mb-6 text-center uppercase">Вхід</h2>
+            <form action="/login" method="POST" class="space-y-4">
+                <input type="text"     name="username" placeholder="Логін" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border focus:border-black">
+                <input type="password" name="password" placeholder="Пароль" required class="w-full p-3 rounded-xl font-bold bg-gray-100 border focus:border-black">
+                <button class="w-full bg-black text-white py-3 rounded-xl font-black uppercase hover:bg-red-700 transition">Увійти</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Створити компанію (Admin) -->
+    <div id="create-company-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
+            <button onclick="toggleModal('create-company-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
+            <h2 class="text-2xl font-black mb-6 uppercase"><i class="fas fa-building mr-2 text-red-600"></i>Створити Компанію</h2>
+            <form action="/admin/create_company" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Назва компанії</label>
+                    <input type="text" name="company_name" required placeholder="TechUkraine LLC" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email директора (логін)</label>
+                    <input type="email" name="email" required placeholder="director@company.com" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Логін директора</label>
+                    <input type="text" name="username" required placeholder="company_admin" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Пароль</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-red-600 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-red-600 text-white py-3 rounded-xl font-black uppercase hover:bg-red-700 transition">Створити компанію</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Додати робітника (Admin) — з пошуком компанії -->
+    <div id="add-employee-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black rounded-3xl w-full max-w-lg relative shadow-2xl border-l-8 border-red-600 overflow-hidden">
+            <div class="bg-gradient-to-r from-[#AC0632] to-red-800 p-6">
+                <button onclick="toggleModal('add-employee-modal')" class="absolute top-4 right-5 text-white/70 hover:text-white text-2xl font-bold transition">&times;</button>
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-3 rounded-xl"><i class="fas fa-user-plus text-white text-xl"></i></div>
+                    <div>
+                        <h2 class="text-2xl font-black text-white uppercase tracking-tight">Новий Робітник</h2>
+                        <p class="text-red-200 text-sm">Додавання працівника до компанії</p>
+                    </div>
+                </div>
+            </div>
+            <form action="/admin/add_employee" method="POST" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-building text-[#AC0632] mr-1"></i> Компанія
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="company-search-input" placeholder="Пошук компанії..." autocomplete="off"
+                            class="w-full p-3 pl-10 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none text-sm transition"
+                            oninput="filterCompanies(this.value)">
+                        <i class="fas fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
+                    </div>
+                    <div id="company-dropdown" class="mt-1 border-2 border-gray-200 rounded-xl overflow-hidden hidden" style="max-height:180px;overflow-y:auto;">
+                        {% for comp in all_companies %}
+                        <div class="company-option flex items-center gap-3 p-3 hover:bg-red-50 cursor-pointer transition border-b border-gray-100 last:border-0"
+                             data-id="{{ comp.id }}" data-name="{{ comp.company_name }}"
+                             onclick="selectCompany({{ comp.id }}, '{{ comp.company_name }}')">
+                            <img src="{{ comp.avatar or 'https://cdn-icons-png.flaticon.com/512/3061/3061341.png' }}" class="w-8 h-8 rounded-lg object-contain bg-gray-100 border shrink-0">
+                            <div>
+                                <div class="font-bold text-sm">{{ comp.company_name }}</div>
+                                {% if comp.contact_info %}<div class="text-xs text-gray-400">{{ comp.contact_info }}</div>{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div id="selected-company-display" class="hidden mt-2 flex items-center gap-3 bg-red-50 border-2 border-red-200 p-3 rounded-xl">
+                        <i class="fas fa-check-circle text-[#AC0632]"></i>
+                        <span id="selected-company-name" class="font-bold text-sm text-[#AC0632]"></span>
+                        <button type="button" onclick="clearCompany()" class="ml-auto text-gray-400 hover:text-red-600 text-xs">✕ Змінити</button>
+                    </div>
+                    <input type="hidden" name="company_id" id="company-id-hidden" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-envelope text-[#AC0632] mr-1"></i> Email / Логін
+                    </label>
+                    <input type="email" name="email" required placeholder="hr@company.com"
+                        class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none transition text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-briefcase text-[#AC0632] mr-1"></i> Посада
+                    </label>
+                    <input type="text" name="position" required placeholder="HR Менеджер, Рекрутер..."
+                        class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none transition text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                        <i class="fas fa-lock text-[#AC0632] mr-1"></i> Пароль
+                    </label>
+                    <div class="relative">
+                        <input type="password" name="password" id="emp-password" required placeholder="••••••••"
+                            class="w-full p-3 pr-12 rounded-xl bg-gray-50 border-2 border-gray-200 focus:border-[#AC0632] outline-none transition text-sm">
+                        <button type="button" onclick="toggleEmpPassword()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-700 transition">
+                            <i class="fas fa-eye" id="emp-pass-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" id="add-emp-submit-btn" disabled
+                    class="w-full bg-gray-300 text-gray-500 py-3.5 rounded-xl font-black uppercase tracking-widest transition cursor-not-allowed">
+                    <i class="fas fa-user-plus mr-2"></i>Додати Робітника
+                </button>
+                <p id="add-emp-hint" class="text-xs text-center text-gray-400">Спочатку оберіть компанію</p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Додати робітника (Company Admin) -->
+    <div id="company-add-employee-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl border-l-8 border-blue-500">
+            <button onclick="toggleModal('company-add-employee-modal')" class="absolute top-4 right-4 text-2xl font-bold hover:text-red-600">&times;</button>
+            <h2 class="text-2xl font-black mb-6 uppercase"><i class="fas fa-user-plus mr-2 text-blue-500"></i>Додати Робітника</h2>
+            <form action="/company/add_employee" method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Email / Логін</label>
+                    <input type="email" name="email" required placeholder="hr@company.com" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Посада</label>
+                    <input type="text" name="position" required placeholder="HR Менеджер" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Пароль</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full p-3 rounded-xl bg-gray-50 border-2 border-gray-100 focus:border-blue-500 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase hover:bg-blue-700 transition">Додати Робітника</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Запрошення студента -->
+    <div id="invite-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black p-8 rounded-3xl w-full max-w-md relative shadow-2xl">
+            <button onclick="toggleModal('invite-modal')" class="absolute top-4 right-4 text-2xl font-bold">&times;</button>
+            <h2 class="text-2xl font-black mb-2 uppercase text-red-700">Найняти Студента</h2>
+            <p id="invite-student-name" class="text-xl font-bold mb-6">...</p>
+            <form action="/send_invite" method="POST" class="space-y-4">
+                <input type="hidden" name="student_id" id="invite-student-id">
+                <textarea name="message" placeholder="Напишіть коротке повідомлення..." required class="w-full p-4 rounded-xl bg-gray-100 h-32 border focus:border-black"></textarea>
+                <button class="w-full bg-green-600 text-white py-3 rounded-xl font-black uppercase hover:bg-green-700 transition">Надіслати Запрошення</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Перегляд профілю студента -->
+    <div id="student-view-modal" class="hidden fixed inset-0 modal-bg z-[100] flex items-center justify-center p-4">
+        <div class="bg-white text-black rounded-3xl w-full max-w-lg relative shadow-2xl overflow-hidden">
+            <button onclick="toggleModal('student-view-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-red-600 text-3xl font-light transition z-50">&times;</button>
+            <div class="px-8 pb-8 text-center pt-10">
+                <div class="w-32 h-32 mx-auto mb-4">
+                    <img id="sv-avatar" src="" class="w-full h-full rounded-full border-4 border-gray-100 shadow-md object-contain bg-white p-1">
+                </div>
+                <h2 id="sv-name" class="text-3xl font-black uppercase tracking-tight"></h2>
+                <p id="sv-spec" class="text-red-600 font-bold mb-6 text-lg"></p>
+                <div class="text-left bg-gray-50 p-6 rounded-2xl space-y-4 text-sm border border-gray-200">
+                    <div>
+                        <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Навички</span>
+                        <p id="sv-skills" class="font-medium bg-white p-2 rounded border border-gray-100"></p>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Контактна інформація</span>
+                        <p id="sv-contact-info" class="font-bold text-gray-800 bg-white p-2 rounded border border-gray-100 truncate"></p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Link (Мережі)</span>
+                            <div id="sv-links" class="text-blue-600 flex gap-3 flex-wrap mt-1"></div>
+                        </div>
+                        <div>
+                            <span class="block text-xs font-bold uppercase text-gray-400 mb-1">Email</span>
+                            <p id="sv-email" class="text-gray-800 font-bold truncate mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
