@@ -2,7 +2,11 @@
 database.py — Робота з базою даних через SQLAlchemy + Flask-Migrate.
 Моделі побудовані точно за схемою ukd_database.db
 """
+import os
+from dotenv import load_dotenv
 
+# Завантажуємо змінні з .env
+load_dotenv()
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
@@ -29,9 +33,9 @@ class Admin(db.Model):
     id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username    = db.Column(db.Text)
     email       = db.Column(db.Text)
-    password    = db.Column(db.Text, default='123')
-    status      = db.Column(db.Text, default='active')
-    admin_level = db.Column(db.Integer, default=1)
+    password    = db.Column(db.Text)
+    status      = db.Column(db.Text)
+    admin_level = db.Column(db.Integer)
 
 
 class Company(db.Model):
@@ -71,7 +75,7 @@ class Student(db.Model):
     id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username     = db.Column(db.Text)
     email        = db.Column(db.Text)
-    password     = db.Column(db.Text, default='123')
+    password     = db.Column(db.Text, default=os.getenv('DEFAULT_USER_PASSWORD'))
     status       = db.Column(db.Text, default='active')
     first_name   = db.Column(db.Text)
     last_name    = db.Column(db.Text)
@@ -123,12 +127,23 @@ class SupportMessage(db.Model):
 # ── Seed: дефолтний адмін ─────────────────────────────────────────────────────
 
 def seed_default_admin():
-    """Створює адміна за замовчуванням, якщо його ще немає."""
-    if not Admin.query.filter_by(username='admin').first():
+    username = os.getenv('ADMIN_USERNAME')
+    email    = os.getenv('ADMIN_EMAIL')
+    password = os.getenv('ADMIN_PASSWORD')
+    level    = os.getenv('ADMIN_LEVEL')
+
+    
+    if not all([username, email, password]):
+        print("Помилка: Дані адміна не знайдені в .env файлі!")
+        return
+
+  
+    if not Admin.query.filter_by(username=username).first():
         db.session.add(Admin(
-            username    = 'admin',
-            email       = 'admin@ukd.edu.ua',
-            password    = '123',
-            admin_level = 10
+            username    = username,
+            email       = email,
+            password    = password, 
+            admin_level = int(level) if level else 1
         ))
         db.session.commit()
+        print(f"Адмін {username} успішно створений з даними з .env")
